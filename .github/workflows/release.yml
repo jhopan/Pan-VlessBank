@@ -77,4 +77,4 @@ jobs:
       - name: Publish latest release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release delete latest --yes --cleanup-tag 2>/dev/null || true; git tag -f latest "${{ steps.tag.outputs.name }}"; git push --force origin latest; gh release create latest dist/* --title latest --notes "Rolling build from ${{ steps.tag.outputs.name }}"
+        run: gh release delete latest --yes --cleanup-tag 2>/dev/null || true; git tag -f latest "${{ github.sha }}"; git push --force origin latest; gh release create latest dist/* --title latest --notes "Rolling build from ${{ steps.tag.outputs.name }}"
