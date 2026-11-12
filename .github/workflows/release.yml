@@ -1,0 +1,79 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag, for example v0.1.0
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: ${{ matrix.goos }}-${{ matrix.goarch }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+            asset: pan-vlessbank_linux_amd64
+          - goos: linux
+            goarch: arm64
+            asset: pan-vlessbank_linux_arm64
+          - goos: darwin
+            goarch: amd64
+            asset: pan-vlessbank_darwin_amd64
+          - goos: darwin
+            goarch: arm64
+            asset: pan-vlessbank_darwin_arm64
+          - goos: windows
+            goarch: amd64
+            asset: pan-vlessbank_windows_amd64.exe
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go/go.mod
+      - name: Build
+        working-directory: go
+        env:
+          CGO_ENABLED: '0'
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: go build -trimpath -ldflags='-s -w' -o ../dist/${{ matrix.asset }} ./cmd/vlessbank
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset }}
+          path: dist/${{ matrix.asset }}
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Write checksums
+        working-directory: dist
+        run: sha256sum pan-vlessbank_* > checksums.txt
+      - name: Resolve tag
+        id: tag
+        run: echo "name=${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}" >> "$GITHUB_OUTPUT"
+      - name: Publish versioned release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "${{ steps.tag.outputs.name }}" dist/* --title "Pan-VlessBank ${{ steps.tag.outputs.name }}" --generate-notes || gh release upload "${{ steps.tag.outputs.name }}" dist/* --clobber
+      - name: Publish latest release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release delete latest --yes --cleanup-tag 2>/dev/null || true; git tag -f latest "${{ steps.tag.outputs.name }}"; git push --force origin latest; gh release create latest dist/* --title latest --notes "Rolling build from ${{ steps.tag.outputs.name }}"
