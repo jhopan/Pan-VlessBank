@@ -84,17 +84,20 @@ const cfTmpl = `
 <div class="hint">Proxy <b>harus ON</b> (orange). Record DNS-only membuat hostname tidak resolve, cloudflared access gagal "no such host".</div>
 </div>
 
-<div class="card"><h2>6 · Onlinekan WebUI (opsional)</h2>
-<p style="font-size:13px;color:var(--muted)">Untuk local lab tanpa IP publik. Membuat tunnel terpisah ke panel lokal <code>127.0.0.1:@@WEBPORT@@</code>. Proxy akun dan tunnel proxy tidak diubah.</p>
-<div class="hint">Hostname publik: <code id="webhost">@@WEBHOST@@</code>. Login panel tetap wajib. Cloudflare Access dapat ditambahkan opsional dari dashboard Cloudflare.</div>
+<div class="card"><h2>6 · Onlinekan WebUI</h2>
+<p style="font-size:13px;color:var(--muted)">Tunnel Cloudflare hanya untuk panel ini. Proxy akun dan tunnel proxy tidak diubah.</p>
+<div class="hint">LAN: <a href="@@WEBLANURL@@" target="_blank"><code>@@WEBLANURL@@</code></a></div>
+<div class="hint">Publik: <a href="@@WEBPUBLICURL@@" target="_blank"><code>@@WEBPUBLICURL@@</code></a> · @@WEBSTATE@@ · connector: @@WEBCONNECTIONS@@</div>
+<label>Hostname publik penuh</label>
+<input id="webhostname" value="@@WEBHOST@@" placeholder="panvlessbank.example.com" style="width:100%">
 <div class="btnrow" style="margin-top:12px">
   <button class="sec" onclick="cfWebTunnel('create')"@@WEB_CREATEDISABLED@@>Buat Tunnel WebUI</button>
-  <button class="sec" onclick="cfWebTunnel('generate')"@@WEB_GENERATEDISABLED@@>Generate Config WebUI</button>
-  <button class="sec" onclick="cfWebDNS()"@@WEB_GENERATEDISABLED@@>Buat DNS WebUI</button>
+  <button class="sec" onclick="cfWebTunnel('generate')"@@WEB_GENERATEDISABLED@@>Simpan Config</button>
+  <button class="sec" onclick="cfWebDNS()"@@WEB_GENERATEDISABLED@@>Hubungkan Hostname</button>
   <button onclick="cfWebTunnel('start')"@@WEB_STARTDISABLED@@>Start WebUI</button>
   <button class="del" onclick="cfWebTunnel('stop')">Stop WebUI</button>
 </div>
-<div class="hint" style="margin-top:10px">Tunnel WebUI: @@WEBSTATE@@ · ID: <code>@@WEBTUNNELID@@</code></div>
+<div class="hint" style="margin-top:10px">Tunnel ID: <code>@@WEBTUNNELID@@</code>. Hubungkan hostname memakai login cloudflared, tanpa API token.</div>
 </div>
 
 <div class="card"><h2>7 · Jalankan Tunnel Proxy</h2>

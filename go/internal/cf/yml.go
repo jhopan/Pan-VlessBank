@@ -61,20 +61,18 @@ func GenerateTunnelYML(tunnelID, credDir, accountsPath, settingsPath, domain, su
 // GenerateWebTunnelYML writes an isolated Cloudflare Tunnel config for the
 // WebUI. It always forwards to loopback so a changed LAN address cannot break
 // the public hostname.
-func GenerateWebTunnelYML(tunnelID, credDir, domain, host string, port int) map[string]any {
+func GenerateWebTunnelYML(tunnelID, credDir, hostname string, port int) map[string]any {
 	cred := filepath.Join(credDir, tunnelID+".json")
 	if !fileExists(cred) {
 		return map[string]any{"ok": false, "error": "credentials tidak ada: " + cred}
 	}
-	domain = strings.Trim(strings.TrimSpace(domain), ".")
-	host = strings.Trim(strings.TrimSpace(host), ".")
-	if domain == "" || host == "" || strings.Contains(host, ".") {
-		return map[string]any{"ok": false, "error": "domain atau hostname panel tidak valid"}
+	hostname = strings.Trim(strings.TrimSpace(hostname), ".")
+	if hostname == "" || !strings.Contains(hostname, ".") {
+		return map[string]any{"ok": false, "error": "hostname publik WebUI tidak valid"}
 	}
 	if port < 1 || port > 65535 {
 		return map[string]any{"ok": false, "error": "port panel tidak valid"}
 	}
-	hostname := host + "." + domain
 	lines := []string{
 		"tunnel: " + tunnelID,
 		"credentials-file: " + cred,

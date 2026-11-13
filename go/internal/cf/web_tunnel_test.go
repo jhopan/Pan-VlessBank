@@ -15,7 +15,7 @@ func TestGenerateWebTunnelYML(t *testing.T) {
 	cred := filepath.Join(credDir, testTunnelID+".json")
 	writeFile(t, cred, "{}")
 
-	res := GenerateWebTunnelYML(testTunnelID, credDir, "example.com", "panel", 9000)
+	res := GenerateWebTunnelYML(testTunnelID, credDir, "panel.example.com", 9000)
 	if res["ok"] != true {
 		t.Fatalf("GenerateWebTunnelYML: %v", res)
 	}
@@ -37,5 +37,22 @@ func TestGenerateWebTunnelYML(t *testing.T) {
 	}, "\n")
 	if string(raw) != want {
 		t.Fatalf("yml:\n%s\nwant:\n%s", raw, want)
+	}
+}
+
+func TestGenerateWebTunnelYMLFullHostname(t *testing.T) {
+	dir := t.TempDir()
+	credDir := filepath.Join(dir, "cred")
+	SetDir(dir)
+	t.Cleanup(func() { SetDir(".") })
+	writeFile(t, filepath.Join(credDir, testTunnelID+".json"), "{}")
+
+	res := GenerateWebTunnelYML(testTunnelID, credDir, "panvlessbank.jhopan.my.id", 9000)
+	if res["ok"] != true || res["hostname"] != "panvlessbank.jhopan.my.id" {
+		t.Fatalf("result: %v", res)
+	}
+	raw, err := os.ReadFile(filepath.Join(dir, "webui.tunnel.yml"))
+	if err != nil || !strings.Contains(string(raw), "hostname: panvlessbank.jhopan.my.id") {
+		t.Fatalf("yml=%q err=%v", raw, err)
 	}
 }

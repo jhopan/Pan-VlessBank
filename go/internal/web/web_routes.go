@@ -319,11 +319,7 @@ func (s *Server) doPost(w http.ResponseWriter, r *http.Request) {
 		set := s.set()
 		switch act := fval(f, "act", ""); act {
 		case "create":
-			if set.Tunnel == "" {
-				writeJSON(w, map[string]any{"error": "buat domain tunnel proxy dulu (step 4)"}, http.StatusBadRequest)
-				return
-			}
-			r := cf.CreateTunnel("webui-" + strings.ReplaceAll(set.Tunnel, ".", "-"))
+			r := cf.CreateTunnel("Pan-VlessBank")
 			if asBool(r["ok"]) {
 				set.WebTunnelID = asString(r["id"])
 				if !s.saveSettings(w, set) {
@@ -332,19 +328,20 @@ func (s *Server) doPost(w http.ResponseWriter, r *http.Request) {
 			}
 			writeJSON(w, r, http.StatusOK)
 		case "generate":
-			if set.WebTunnelID == "" || set.Tunnel == "" {
-				writeJSON(w, map[string]any{"error": "domain atau tunnel WebUI belum ada"}, http.StatusBadRequest)
+			if set.WebTunnelID == "" {
+				writeJSON(w, map[string]any{"error": "tunnel WebUI belum ada"}, http.StatusBadRequest)
 				return
 			}
 			host := strings.TrimSpace(fval(f, "host", set.WebTunnelHost))
 			if host == "" {
-				host = "panel"
+				writeJSON(w, map[string]any{"error": "isi hostname penuh, contoh panel.example.com"}, http.StatusBadRequest)
+				return
 			}
 			set.WebTunnelHost = host
 			if !s.saveSettings(w, set) {
 				return
 			}
-			writeJSON(w, cf.GenerateWebTunnelYML(set.WebTunnelID, s.cfCredDir(), set.Tunnel, set.WebTunnelHost, s.d.Port), http.StatusOK)
+			writeJSON(w, cf.GenerateWebTunnelYML(set.WebTunnelID, s.cfCredDir(), set.WebTunnelHost, s.d.Port), http.StatusOK)
 		case "start":
 			writeJSON(w, map[string]any{"result": cf.StartWebTunnel(s.webTunPath())}, http.StatusOK)
 		case "stop":
@@ -356,12 +353,11 @@ func (s *Server) doPost(w http.ResponseWriter, r *http.Request) {
 
 	case "/api/cf/webdns":
 		set := s.set()
-		tok, zoneID := strings.TrimSpace(fval(f, "token", "")), strings.TrimSpace(fval(f, "zone_id", ""))
-		if tok == "" || zoneID == "" || set.WebTunnelID == "" || set.Tunnel == "" {
-			writeJSON(w, map[string]any{"error": "token/zone/domain/tunnel WebUI tidak lengkap"}, http.StatusBadRequest)
+		if set.WebTunnelID == "" || set.WebTunnelHost == "" {
+			writeJSON(w, map[string]any{"error": "tunnel atau hostname WebUI belum diisi"}, http.StatusBadRequest)
 			return
 		}
-		writeJSON(w, cf.APICreateWebDNS(tok, zoneID, set.WebTunnelHost+"."+set.Tunnel, set.WebTunnelID), http.StatusOK)
+		writeJSON(w, cf.RouteDNS(set.WebTunnelID, set.WebTunnelHost), http.StatusOK)
 		return
 
 	case "/api/cf/tunnel":

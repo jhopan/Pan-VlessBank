@@ -153,20 +153,19 @@ func (s *Server) bodyCF() string {
 		logHTML = "(kosong)"
 	}
 
-	webHost := set.WebTunnelHost
-	if webHost == "" {
-		webHost = "panel"
-	}
-	webHostname := "panel.<domain>"
-	if set.Tunnel != "" {
-		webHostname = webHost + "." + set.Tunnel
-	}
-	webState := `<span class="badge expired">BELUM</span>`
-	if cf.WebTunnelRunning() {
-		webState = `<span class="badge paid">RUNNING</span>`
+	webHostname := strings.Trim(strings.TrimSpace(set.WebTunnelHost), ".")
+	webState := `<span class="badge expired">BELUM DIATUR</span>`
+	webConnections := 0
+	if set.WebTunnelID != "" {
+		webConnections = cf.TunnelConnections(set.WebTunnelID)
+		if webConnections > 0 {
+			webState = `<span class="badge paid">ONLINE</span>`
+		} else {
+			webState = `<span class="badge pending">TUNNEL MATI</span>`
+		}
 	}
 	webCreateDisabled, webGenerateDisabled, webStartDisabled := "", " disabled", " disabled"
-	if set.Tunnel == "" || !cf.BinOK() {
+	if !cf.BinOK() {
 		webCreateDisabled = " disabled"
 	}
 	if set.WebTunnelID != "" {
@@ -174,6 +173,11 @@ func (s *Server) bodyCF() string {
 	}
 	if set.WebTunnelID != "" && fileExists(s.webTunPath()) {
 		webStartDisabled = ""
+	}
+	lanURL := "http://" + lanIP() + ":" + itoa(s.d.Port)
+	webPublicURL := ""
+	if webHostname != "" {
+		webPublicURL = "https://" + webHostname
 	}
 
 	return fill(cfTmpl,
@@ -208,6 +212,9 @@ func (s *Server) bodyCF() string {
 		"@@WEB_CREATEDISABLED@@", webCreateDisabled,
 		"@@WEB_GENERATEDISABLED@@", webGenerateDisabled,
 		"@@WEB_STARTDISABLED@@", webStartDisabled,
+		"@@WEBLANURL@@", esc(lanURL),
+		"@@WEBPUBLICURL@@", esc(webPublicURL),
+		"@@WEBCONNECTIONS@@", itoa(webConnections),
 		"@@SCRIPT@@", cfScript)
 }
 

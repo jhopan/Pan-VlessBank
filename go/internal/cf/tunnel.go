@@ -197,6 +197,50 @@ func DeleteTunnel(id string) map[string]any {
 	return map[string]any{"ok": false, "error": strings.TrimSpace(out.String() + errb.String())}
 }
 
+// RouteDNS assigns a public hostname through the current cloudflared login.
+// Unlike the proxy wildcard API path, it does not require a Cloudflare API token.
+func RouteDNS(tunnel, hostname string) map[string]any {
+	b := resolvedBin()
+	if b == "" {
+		return map[string]any{"ok": false, "error": "cloudflared belum ada"}
+	}
+	tunnel, hostname = strings.TrimSpace(tunnel), strings.Trim(strings.TrimSpace(hostname), ".")
+	if tunnel == "" || hostname == "" || !strings.Contains(hostname, ".") {
+		return map[string]any{"ok": false, "error": "tunnel atau hostname publik tidak valid"}
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, b, "tunnel", "route", "dns", tunnel, hostname)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return map[string]any{"ok": false, "error": strings.TrimSpace(string(out))}
+	}
+	return map[string]any{"ok": true, "hostname": hostname}
+}
+
+// TunnelConnections reports Cloudflare edge connectors for a tunnel created
+// outside this process as well as one created through the panel.
+func TunnelConnections(id string) int {
+	b := resolvedBin()
+	if b == "" || strings.TrimSpace(id) == "" {
+		return 0
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, b, "tunnel", "info", id, "--output", "json").Output()
+	if err != nil {
+		return 0
+	}
+	var data map[string]any
+	if json.Unmarshal(out, &data) != nil {
+		return 0
+	}
+	if conns, ok := data["connections"].([]any); ok {
+		return len(conns)
+	}
+	return 0
+}
+
 // Running reports whether the tunnel child started by Start is alive
 // (cf.py tunnel_running).
 func Running() bool {
