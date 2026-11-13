@@ -131,3 +131,14 @@ func APICreateDNS(token, zoneID, zoneName, tunnelID, sub string) map[string]any 
 	}
 	return map[string]any{"ok": false, "error": firstError(r)}
 }
+
+// APICreateWebDNS creates the proxied CNAME for an isolated WebUI tunnel.
+func APICreateWebDNS(token, zoneID, hostname, tunnelID string) map[string]any {
+	res := cfAPI(token, "/zones/"+zoneID+"/dns_records", http.MethodPost, map[string]any{
+		"type": "CNAME", "name": hostname, "content": tunnelID + ".cfargotunnel.com", "proxied": true,
+	})
+	if ok, _ := res["success"].(bool); ok || errorCode(res) == 81057 {
+		return map[string]any{"ok": true, "hostname": hostname, "target": tunnelID + ".cfargotunnel.com"}
+	}
+	return map[string]any{"ok": false, "error": firstError(res)}
+}

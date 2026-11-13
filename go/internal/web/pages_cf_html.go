@@ -84,7 +84,20 @@ const cfTmpl = `
 <div class="hint">Proxy <b>harus ON</b> (orange). Record DNS-only membuat hostname tidak resolve, cloudflared access gagal "no such host".</div>
 </div>
 
-<div class="card"><h2>6 · Jalankan Tunnel</h2>
+<div class="card"><h2>6 · Onlinekan WebUI (opsional)</h2>
+<p style="font-size:13px;color:var(--muted)">Untuk local lab tanpa IP publik. Membuat tunnel terpisah ke panel lokal <code>127.0.0.1:@@WEBPORT@@</code>. Proxy akun dan tunnel proxy tidak diubah.</p>
+<div class="hint">Hostname publik: <code id="webhost">@@WEBHOST@@</code>. Login panel tetap wajib. Cloudflare Access dapat ditambahkan opsional dari dashboard Cloudflare.</div>
+<div class="btnrow" style="margin-top:12px">
+  <button class="sec" onclick="cfWebTunnel('create')"@@WEB_CREATEDISABLED@@>Buat Tunnel WebUI</button>
+  <button class="sec" onclick="cfWebTunnel('generate')"@@WEB_GENERATEDISABLED@@>Generate Config WebUI</button>
+  <button class="sec" onclick="cfWebDNS()"@@WEB_GENERATEDISABLED@@>Buat DNS WebUI</button>
+  <button onclick="cfWebTunnel('start')"@@WEB_STARTDISABLED@@>Start WebUI</button>
+  <button class="del" onclick="cfWebTunnel('stop')">Stop WebUI</button>
+</div>
+<div class="hint" style="margin-top:10px">Tunnel WebUI: @@WEBSTATE@@ · ID: <code>@@WEBTUNNELID@@</code></div>
+</div>
+
+<div class="card"><h2>7 · Jalankan Tunnel Proxy</h2>
 <p style="font-size:13px;color:var(--muted)">
 config.tunnel.yml: @@YMLSTATE@@
 </p>

@@ -33,7 +33,8 @@ var (
 	loginURL  string
 	loginDone bool
 
-	procTunnel *child
+	procTunnel    *child
+	procWebTunnel *child
 )
 
 var (

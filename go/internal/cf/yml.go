@@ -58,6 +58,38 @@ func GenerateTunnelYML(tunnelID, credDir, accountsPath, settingsPath, domain, su
 	}
 }
 
+// GenerateWebTunnelYML writes an isolated Cloudflare Tunnel config for the
+// WebUI. It always forwards to loopback so a changed LAN address cannot break
+// the public hostname.
+func GenerateWebTunnelYML(tunnelID, credDir, domain, host string, port int) map[string]any {
+	cred := filepath.Join(credDir, tunnelID+".json")
+	if !fileExists(cred) {
+		return map[string]any{"ok": false, "error": "credentials tidak ada: " + cred}
+	}
+	domain = strings.Trim(strings.TrimSpace(domain), ".")
+	host = strings.Trim(strings.TrimSpace(host), ".")
+	if domain == "" || host == "" || strings.Contains(host, ".") {
+		return map[string]any{"ok": false, "error": "domain atau hostname panel tidak valid"}
+	}
+	if port < 1 || port > 65535 {
+		return map[string]any{"ok": false, "error": "port panel tidak valid"}
+	}
+	hostname := host + "." + domain
+	lines := []string{
+		"tunnel: " + tunnelID,
+		"credentials-file: " + cred,
+		"ingress:",
+		"  - hostname: " + hostname,
+		fmt.Sprintf("    service: http://127.0.0.1:%d", port),
+		"  - service: http_status:404",
+	}
+	path := filepath.Join(Dir(), "webui.tunnel.yml")
+	if err := os.WriteFile(path, []byte(strings.Join(lines, "\n")+"\n"), 0o644); err != nil {
+		return map[string]any{"ok": false, "error": err.Error()}
+	}
+	return map[string]any{"ok": true, "path": path, "hostname": hostname, "port": port, "cred": cred}
+}
+
 // YMLPreview returns the content of config.tunnel.yml (cf.py yml_preview).
 func YMLPreview() map[string]any {
 	yml := filepath.Join(Dir(), "config.tunnel.yml")

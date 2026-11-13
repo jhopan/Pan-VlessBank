@@ -153,6 +153,29 @@ func (s *Server) bodyCF() string {
 		logHTML = "(kosong)"
 	}
 
+	webHost := set.WebTunnelHost
+	if webHost == "" {
+		webHost = "panel"
+	}
+	webHostname := "panel.<domain>"
+	if set.Tunnel != "" {
+		webHostname = webHost + "." + set.Tunnel
+	}
+	webState := `<span class="badge expired">BELUM</span>`
+	if cf.WebTunnelRunning() {
+		webState = `<span class="badge paid">RUNNING</span>`
+	}
+	webCreateDisabled, webGenerateDisabled, webStartDisabled := "", " disabled", " disabled"
+	if set.Tunnel == "" || !cf.BinOK() {
+		webCreateDisabled = " disabled"
+	}
+	if set.WebTunnelID != "" {
+		webGenerateDisabled = ""
+	}
+	if set.WebTunnelID != "" && fileExists(s.webTunPath()) {
+		webStartDisabled = ""
+	}
+
 	return fill(cfTmpl,
 		"@@BINBADGE@@", binBadge,
 		"@@LOGINBADGE@@", loginBadge,
@@ -169,7 +192,7 @@ func (s *Server) bodyCF() string {
 		"@@CANCELBTN@@", cancelBtn,
 		"@@LOGINBOX@@", loginDisplay,
 		"@@LOGINURL@@", loginURLHTML,
-		"@@LOGINDONE@@", loginDoneNote + certNote,
+		"@@LOGINDONE@@", loginDoneNote+certNote,
 		"@@TUNROWS@@", tunnelRows,
 		"@@LOGINDISABLED@@", loginDisabled,
 		"@@MANDOMAIN@@", esc(set.Tunnel),
@@ -178,6 +201,13 @@ func (s *Server) bodyCF() string {
 		"@@YMLSTATE@@", ymlState,
 		"@@YMLDISABLED@@", ymlDisabled,
 		"@@LOGHTML@@", logHTML,
+		"@@WEBPORT@@", itoa(s.d.Port),
+		"@@WEBHOST@@", esc(webHostname),
+		"@@WEBSTATE@@", webState,
+		"@@WEBTUNNELID@@", esc(set.WebTunnelID),
+		"@@WEB_CREATEDISABLED@@", webCreateDisabled,
+		"@@WEB_GENERATEDISABLED@@", webGenerateDisabled,
+		"@@WEB_STARTDISABLED@@", webStartDisabled,
 		"@@SCRIPT@@", cfScript)
 }
 

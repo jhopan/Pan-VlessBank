@@ -155,6 +155,23 @@ function cfTunnel(act){
     },2000);
   });
 }
+function cfWebTunnel(act){
+  cfMsg(act==='start'?'Menyalakan tunnel WebUI...':'Memproses tunnel WebUI...',null);
+  cfApi('/api/cf/webtunnel',{act:act}).then(function(j){
+    if(j.ok===false || j.error){cfMsg('Error: '+(j.error||'?'),false);return;}
+    cfMsg(j.result||'✓ Tunnel WebUI dibuat',true); setTimeout(function(){location.reload();},900);
+  });
+}
+function cfWebDNS(){
+  var z=_selectedZone(), tok=document.getElementById('cftoken').value.trim();
+  if(!z.id || !tok){cfMsg('Load lalu pilih domain dan isi token dulu',false);return;}
+  cfMsg('Membuat DNS WebUI...',null);
+  cfApi('/api/cf/webdns',{token:tok,zone_id:z.id}).then(function(j){
+    if(j.ok) cfMsg('✓ DNS WebUI: '+j.hostname+' -> '+j.target,true);
+    else cfMsg('Error DNS: '+(j.error||'?'),false);
+  });
+}
+
 // restore token dari session
 (function(){var t=sessionStorage.getItem('cftoken');if(t)document.getElementById('cftoken').value=t;})();
 // poll log + badge tiap 5 detik

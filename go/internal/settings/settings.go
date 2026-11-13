@@ -20,29 +20,33 @@ import (
 // Settings = dict DEFAULTS/SET di webui.py. Urutan field sengaja sama dengan urutan
 // key Python supaya isi webui.settings.json identik byte-per-byte.
 type Settings struct {
-	Xray     string `json:"xray"`
-	Base     int    `json:"base"`
-	BaseHTTP int    `json:"base_http"`
-	Listen   string `json:"listen"`
-	Auth     string `json:"auth"`
-	Tunnel   string `json:"tunnel"`
-	TunnelID string `json:"tunnel_id"`
-	XrayPath string `json:"xray_path"`
-	Insecure bool   `json:"insecure"`
+	Xray          string `json:"xray"`
+	Base          int    `json:"base"`
+	BaseHTTP      int    `json:"base_http"`
+	Listen        string `json:"listen"`
+	Auth          string `json:"auth"`
+	Tunnel        string `json:"tunnel"`
+	TunnelID      string `json:"tunnel_id"`
+	WebTunnelID   string `json:"web_tunnel_id,omitempty"`
+	WebTunnelHost string `json:"web_tunnel_host,omitempty"`
+	XrayPath      string `json:"xray_path"`
+	Insecure      bool   `json:"insecure"`
 }
 
 // Defaults = webui.py DEFAULTS. defaultXray = nilai --xray.
 func Defaults(defaultXray string) Settings {
 	return Settings{
-		Xray:     "",
-		Base:     1081,
-		BaseHTTP: 0,
-		Listen:   "127.0.0.1",
-		Auth:     "",
-		Tunnel:   "",
-		TunnelID: "",
-		XrayPath: defaultXray,
-		Insecure: false,
+		Xray:          "",
+		Base:          1081,
+		BaseHTTP:      0,
+		Listen:        "127.0.0.1",
+		Auth:          "",
+		Tunnel:        "",
+		TunnelID:      "",
+		WebTunnelID:   "",
+		WebTunnelHost: "",
+		XrayPath:      defaultXray,
+		Insecure:      false,
 	}
 }
 

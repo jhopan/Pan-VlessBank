@@ -19,3 +19,5 @@ dist/
 checksums.txt
 accounts.txt.bak-*
 cloudflared.log
+webui.tunnel.yml
+webui.tunnel.log

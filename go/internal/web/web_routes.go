@@ -315,6 +315,55 @@ func (s *Server) doPost(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, cf.APICreateDNS(tok, zoneID, zoneName, tid, sub), http.StatusOK)
 		return
 
+	case "/api/cf/webtunnel":
+		set := s.set()
+		switch act := fval(f, "act", ""); act {
+		case "create":
+			if set.Tunnel == "" {
+				writeJSON(w, map[string]any{"error": "buat domain tunnel proxy dulu (step 4)"}, http.StatusBadRequest)
+				return
+			}
+			r := cf.CreateTunnel("webui-" + strings.ReplaceAll(set.Tunnel, ".", "-"))
+			if asBool(r["ok"]) {
+				set.WebTunnelID = asString(r["id"])
+				if !s.saveSettings(w, set) {
+					return
+				}
+			}
+			writeJSON(w, r, http.StatusOK)
+		case "generate":
+			if set.WebTunnelID == "" || set.Tunnel == "" {
+				writeJSON(w, map[string]any{"error": "domain atau tunnel WebUI belum ada"}, http.StatusBadRequest)
+				return
+			}
+			host := strings.TrimSpace(fval(f, "host", set.WebTunnelHost))
+			if host == "" {
+				host = "panel"
+			}
+			set.WebTunnelHost = host
+			if !s.saveSettings(w, set) {
+				return
+			}
+			writeJSON(w, cf.GenerateWebTunnelYML(set.WebTunnelID, s.cfCredDir(), set.Tunnel, set.WebTunnelHost, s.d.Port), http.StatusOK)
+		case "start":
+			writeJSON(w, map[string]any{"result": cf.StartWebTunnel(s.webTunPath())}, http.StatusOK)
+		case "stop":
+			writeJSON(w, map[string]any{"result": cf.StopWebTunnel()}, http.StatusOK)
+		default:
+			writeJSON(w, map[string]any{"error": "act harus create/generate/start/stop"}, http.StatusBadRequest)
+		}
+		return
+
+	case "/api/cf/webdns":
+		set := s.set()
+		tok, zoneID := strings.TrimSpace(fval(f, "token", "")), strings.TrimSpace(fval(f, "zone_id", ""))
+		if tok == "" || zoneID == "" || set.WebTunnelID == "" || set.Tunnel == "" {
+			writeJSON(w, map[string]any{"error": "token/zone/domain/tunnel WebUI tidak lengkap"}, http.StatusBadRequest)
+			return
+		}
+		writeJSON(w, cf.APICreateWebDNS(tok, zoneID, set.WebTunnelHost+"."+set.Tunnel, set.WebTunnelID), http.StatusOK)
+		return
+
 	case "/api/cf/tunnel":
 		switch act := fval(f, "act", ""); act {
 		case "start":

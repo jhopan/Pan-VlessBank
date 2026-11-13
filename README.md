@@ -114,6 +114,18 @@ Menu: **Dashboard** (`/admin`, ringkasan: jumlah akun, status xray, tunnel, IP L
 Test IP / Test Semua IP, tambah & hapus akun) · **Log** (`/admin/log`) · **Cloudflare** (`/admin/cf`) ·
 **Pengaturan** (`/admin/settings`).
 
+### Onlinekan WebUI dari local lab
+
+Untuk mesin tanpa IP publik: setelah login Cloudflare dan memilih domain, buka step **Onlinekan WebUI** di menu Cloudflare.
+
+1. Klik **Buat Tunnel WebUI**. Tunnel ini terpisah dari tunnel proxy akun.
+2. Klik **Generate Config WebUI**. File `webui.tunnel.yml` meneruskan `panel.<domain>` ke `http://127.0.0.1:<port-panel>`.
+3. Load dan pilih domain dengan API token, lalu klik **Buat DNS WebUI**. CNAME proxied `panel.<domain>` diarahkan ke tunnel WebUI.
+4. Klik **Start WebUI**. Panel tetap bind LAN (`0.0.0.0`) untuk perangkat lokal, sedangkan tunnel memakai loopback sehingga perubahan IP LAN tidak mengganggu hostname publik.
+
+Cloudflare Access opsional, tetapi login WebUI tetap wajib. Jangan membuka port panel di router, tunnel membuat koneksi keluar ke Cloudflare.
+
+
 ### Menu Cloudflare (via web, no terminal)
 
 Alur lengkap:

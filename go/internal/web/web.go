@@ -23,6 +23,7 @@ import (
 // Deps adalah seluruh ketergantungan panel (lihat kontrak).
 type Deps struct {
 	Dir           string // HERE: folder accounts.txt, config.json, ...
+	Port          int    // port panel aktual, target loopback tunnel WebUI
 	DefaultXray   string // default flag --xray
 	Settings      func() settings.Settings
 	SaveSettings  func(settings.Settings) error
@@ -58,6 +59,7 @@ func (s *Server) path(name string) string { return filepath.Join(s.d.Dir, name) 
 
 func (s *Server) cfgPath() string      { return s.path("config.json") }
 func (s *Server) tunPath() string      { return s.path("config.tunnel.yml") }
+func (s *Server) webTunPath() string   { return s.path("webui.tunnel.yml") }
 func (s *Server) loginPath() string    { return s.path("webui.login") }
 func (s *Server) accPath() string      { return s.path("accounts.txt") }
 func (s *Server) settingsPath() string { return s.path("webui.settings.json") }

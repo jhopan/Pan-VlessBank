@@ -275,6 +275,63 @@ func Status() map[string]any {
 	}
 }
 
+// WebTunnelRunning reports whether the WebUI tunnel child is alive.
+func WebTunnelRunning() bool {
+	mu.Lock()
+	c := procWebTunnel
+	mu.Unlock()
+	return c.alive()
+}
+
+// StartWebTunnel runs an isolated cloudflared config for the WebUI. Proxy
+// ingress remains owned by Start and is never restarted here.
+func StartWebTunnel(configYML string) string {
+	b := resolvedBin()
+	if b == "" {
+		return "cloudflared belum ada"
+	}
+	if !fileExists(configYML) {
+		return "webui.tunnel.yml tidak ada"
+	}
+	if WebTunnelRunning() {
+		return "tunnel WebUI sudah jalan"
+	}
+	log, err := os.OpenFile(filepath.Join(Dir(), "webui.tunnel.log"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	if err != nil {
+		return fmt.Sprintf("error: %v", err)
+	}
+	cmd := exec.Command(b, "tunnel", "--config", configYML, "run")
+	cmd.Stdout = log
+	cmd.Stderr = log
+	c, err := startChild(cmd)
+	log.Close()
+	if err != nil {
+		return fmt.Sprintf("error: %v", err)
+	}
+	mu.Lock()
+	procWebTunnel = c
+	mu.Unlock()
+	return fmt.Sprintf("tunnel WebUI start (pid %d)", c.pid())
+}
+
+// StopWebTunnel stops only the WebUI tunnel child.
+func StopWebTunnel() string {
+	mu.Lock()
+	c := procWebTunnel
+	mu.Unlock()
+	if !c.alive() {
+		return "tunnel WebUI memang mati"
+	}
+	terminate(c.cmd.Process)
+	if !waitClosed(c.done, 5*time.Second) {
+		_ = c.cmd.Process.Kill()
+	}
+	mu.Lock()
+	procWebTunnel = nil
+	mu.Unlock()
+	return "tunnel WebUI stop"
+}
+
 // runCombined runs a command and returns stdout + stderr, like Python's
 // subprocess.run(..., capture_output=True) with r.stdout + r.stderr.
 func runCombined(bin string, timeout time.Duration, args ...string) string {

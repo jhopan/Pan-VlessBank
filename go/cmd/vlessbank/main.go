@@ -466,6 +466,7 @@ func runServe(args []string) {
 
 	srv := web.New(web.Deps{
 		Dir:         wd,
+		Port:        *port,
 		DefaultXray: *xrayFlag,
 		Settings: func() settings.Settings {
 			a.mu.Lock()
