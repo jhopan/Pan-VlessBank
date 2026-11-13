@@ -227,18 +227,24 @@ func TunnelConnections(id string) int {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	out, err := exec.CommandContext(ctx, b, "tunnel", "info", id, "--output", "json").Output()
+	out, err := exec.CommandContext(ctx, b, "tunnel", "info", id).CombinedOutput()
 	if err != nil {
 		return 0
 	}
 	var data map[string]any
-	if json.Unmarshal(out, &data) != nil {
-		return 0
+	if json.Unmarshal(out, &data) == nil {
+		if conns, ok := data["connections"].([]any); ok {
+			return len(conns)
+		}
 	}
-	if conns, ok := data["connections"].([]any); ok {
-		return len(conns)
+	count := 0
+	for _, line := range strings.Split(string(out), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) >= 6 && uuidRe.MatchString(fields[0]) {
+			count++
+		}
 	}
-	return 0
+	return count
 }
 
 // Running reports whether the tunnel child started by Start is alive
