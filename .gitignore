@@ -21,6 +21,4 @@ accounts.txt.bak-*
 cloudflared.log
 webui.tunnel.yml
 webui.tunnel.log
-go/pan-vlessbank-client
-go/pan-vlessbank-client.exe
 go/*.exe~

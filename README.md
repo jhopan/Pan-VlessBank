@@ -166,28 +166,6 @@ Flag lain: `--sub` (prefix subdomain, mis. `--sub socks` -> `socks1.socks.exampl
 `--socks-base` / `--http-base` (port lokal pertama, default 7001 / 8001), `--no-http` (hanya
 listener SOCKS), `--cloudflared` (path/command cloudflared). Ctrl+C mematikan semua listener.
 
-### Pan-VlessBank Client untuk Camoufox remote
-
-Jalankan `pan-vlessbank-client` pada mesin yang menjalankan Camoufox, bukan pada server Debian. Client membuat bridge Cloudflare Access TCP dan panel lokal di `http://127.0.0.1:9900`.
-
-```bash
-./pan-vlessbank-client --domain proxy.example.com --accounts 2
-```
-
-Di panel client, klik **Start Listener** lalu login Cloudflare Access jika browser diminta. URI lokal menjadi `socks5://127.0.0.1:7001` dan `http://127.0.0.1:8001` untuk akun pertama. Client tidak memerlukan API token atau link VLESS.
-
-Camoufox SOCKS:
-
-```python
-proxy={"server": "socks5://127.0.0.1:7001", "username": "USER", "password": "PASSWORD"}
-```
-
-Camoufox HTTP:
-
-```python
-proxy={"server": "http://127.0.0.1:8001", "username": "USER", "password": "PASSWORD"}
-```
-
 
 Atau manual, port lokal wajib beda per akun:
 
