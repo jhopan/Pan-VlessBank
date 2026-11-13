@@ -25,18 +25,43 @@ jobs:
           - goos: linux
             goarch: amd64
             asset: pan-vlessbank_linux_amd64
+            cmd: ./cmd/vlessbank
           - goos: linux
             goarch: arm64
             asset: pan-vlessbank_linux_arm64
+            cmd: ./cmd/vlessbank
           - goos: darwin
             goarch: amd64
             asset: pan-vlessbank_darwin_amd64
+            cmd: ./cmd/vlessbank
           - goos: darwin
             goarch: arm64
             asset: pan-vlessbank_darwin_arm64
+            cmd: ./cmd/vlessbank
           - goos: windows
             goarch: amd64
             asset: pan-vlessbank_windows_amd64.exe
+            cmd: ./cmd/vlessbank
+          - goos: linux
+            goarch: amd64
+            asset: pan-vlessbank-client_linux_amd64
+            cmd: ./cmd/pan-vlessbank-client
+          - goos: linux
+            goarch: arm64
+            asset: pan-vlessbank-client_linux_arm64
+            cmd: ./cmd/pan-vlessbank-client
+          - goos: darwin
+            goarch: amd64
+            asset: pan-vlessbank-client_darwin_amd64
+            cmd: ./cmd/pan-vlessbank-client
+          - goos: darwin
+            goarch: arm64
+            asset: pan-vlessbank-client_darwin_arm64
+            cmd: ./cmd/pan-vlessbank-client
+          - goos: windows
+            goarch: amd64
+            asset: pan-vlessbank-client_windows_amd64.exe
+            cmd: ./cmd/pan-vlessbank-client
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -48,7 +73,7 @@ jobs:
           CGO_ENABLED: '0'
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
-        run: go build -trimpath -ldflags='-s -w' -o ../dist/${{ matrix.asset }} ./cmd/vlessbank
+        run: go build -trimpath -ldflags='-s -w' -o ../dist/${{ matrix.asset }} ${{ matrix.cmd }}
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.asset }}
@@ -66,7 +91,7 @@ jobs:
           merge-multiple: true
       - name: Write checksums
         working-directory: dist
-        run: sha256sum pan-vlessbank_* > checksums.txt
+        run: sha256sum pan-vlessbank* > checksums.txt
       - name: Resolve tag
         id: tag
         run: echo "name=${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}" >> "$GITHUB_OUTPUT"
