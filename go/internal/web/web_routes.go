@@ -80,8 +80,9 @@ func (s *Server) doGet(w http.ResponseWriter, r *http.Request) {
 	case "/api/health":
 		validation := ops.ReadTunnelValidation(s.tunPath())
 		set := s.set()
+		proxyTunnel := cf.TunnelRunning() || (set.TunnelID != "" && cf.TunnelConnections(set.TunnelID) > 0)
 		webTunnel := cf.WebTunnelRunning() || (set.WebTunnelID != "" && cf.TunnelConnections(set.WebTunnelID) > 0)
-		writeJSON(w, ops.Health(s.xrayRunning(), cf.TunnelRunning(), webTunnel, fileExists(s.cfgPath()), validation), http.StatusOK)
+		writeJSON(w, ops.Health(s.xrayRunning(), proxyTunnel, webTunnel, fileExists(s.cfgPath()), validation), http.StatusOK)
 		return
 	case "/api/client-tokens":
 		if s.d.ClientTokens == nil {
