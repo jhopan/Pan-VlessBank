@@ -79,7 +79,9 @@ func (s *Server) doGet(w http.ResponseWriter, r *http.Request) {
 	switch path {
 	case "/api/health":
 		validation := ops.ReadTunnelValidation(s.tunPath())
-		writeJSON(w, ops.Health(s.xrayRunning(), cf.TunnelRunning(), cf.WebTunnelRunning(), fileExists(s.cfgPath()), validation), http.StatusOK)
+		set := s.set()
+		webTunnel := cf.WebTunnelRunning() || (set.WebTunnelID != "" && cf.TunnelConnections(set.WebTunnelID) > 0)
+		writeJSON(w, ops.Health(s.xrayRunning(), cf.TunnelRunning(), webTunnel, fileExists(s.cfgPath()), validation), http.StatusOK)
 		return
 	case "/api/client-tokens":
 		if s.d.ClientTokens == nil {
