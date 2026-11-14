@@ -155,6 +155,13 @@ function cfTunnel(act){
     },2000);
   });
 }
+
+function cfTunnelDiagnostics(){
+	cfGet('/api/cf/tunnel-diagnostics').then(function(j){
+		var out=document.getElementById('cftdiag');if(out){out.hidden=false;out.textContent=JSON.stringify(j,null,2);}
+		cfMsg(j.validation&&j.validation.ok?'Tunnel siap':'Tunnel perlu diperbaiki',j.validation&&j.validation.ok);
+	}).catch(function(){cfMsg('Gagal membaca diagnostics tunnel',false);});
+}
 function cfWebTunnel(act){
   var host=document.getElementById('webhostname');
   var data={act:act}; if(host) data.host=host.value.trim();

@@ -78,6 +78,24 @@ func (s *Server) doGet(w http.ResponseWriter, r *http.Request) {
 
 	q := r.URL.Query()
 	switch path {
+	case "/api/cf/tunnel-diagnostics":
+		set := s.set()
+		validation := ops.ReadTunnelValidation(s.tunPath())
+		raw, _ := os.ReadFile(s.tunPath())
+		serviceActive := false
+		if svc := s.proxyTunnelService(); svc != nil {
+			serviceActive = svc.Active()
+		}
+		writeJSON(w, map[string]any{
+			"tunnel_id":      set.TunnelID,
+			"domain":         set.Tunnel,
+			"connectors":     cf.TunnelConnections(set.TunnelID),
+			"service_active": serviceActive,
+			"ingress":        ops.TunnelIngress(raw),
+			"validation":     validation,
+			"access":         "opsional, tunnel tidak memaksa Cloudflare Access",
+		}, http.StatusOK)
+		return
 	case "/api/health":
 		writeJSON(w, s.healthSnapshot(), http.StatusOK)
 		return

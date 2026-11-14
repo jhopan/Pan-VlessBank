@@ -101,13 +101,13 @@ const cfTmpl = `
 </div>
 
 <div class="card"><h2>7 · Jalankan Tunnel Proxy</h2>
-<p style="font-size:13px;color:var(--muted)">
-config.tunnel.yml: @@YMLSTATE@@
-</p>
+<p style="font-size:13px;color:var(--muted)">config.tunnel.yml: @@YMLSTATE@@. Cloudflare Access opsional, tunnel tetap dapat dipakai via listener cloudflared client tanpa policy Access.</p>
 <div class="btnrow">
 <button onclick="cfTunnel('start')"@@YMLDISABLED@@>▶ Start Tunnel</button>
 <button class="del" onclick="cfTunnel('stop')">■ Stop Tunnel</button>
+<button class="sec" onclick="cfTunnelDiagnostics()">Cek Tunnel</button>
 </div>
+<pre id="cftdiag" hidden></pre>
 <div style="margin-top:14px"><b style="font-size:13px">Log cloudflared:</b><pre id="cflog">@@LOGHTML@@</pre></div>
 </div>
 

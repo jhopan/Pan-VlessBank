@@ -24,6 +24,33 @@ type ingress struct {
 	port int
 }
 
+type Ingress struct {
+	Host string `json:"host"`
+	Port int    `json:"port"`
+}
+
+func TunnelIngress(raw []byte) []Ingress {
+	lines := strings.Split(string(raw), "\n")
+	out := []Ingress{}
+	host := ""
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "- hostname:") {
+			host = strings.TrimSpace(strings.TrimPrefix(line, "- hostname:"))
+			continue
+		}
+		if strings.HasPrefix(line, "service: tcp://") && host != "" {
+			_, p, err := net.SplitHostPort(strings.TrimPrefix(line, "service: tcp://"))
+			if err == nil {
+				if n, err := strconv.Atoi(p); err == nil {
+					out = append(out, Ingress{Host: host, Port: n})
+				}
+			}
+			host = ""
+		}
+	}
+	return out
+}
 func ValidateProxyTunnel(raw []byte) TunnelValidation {
 	lines := strings.Split(string(raw), "\n")
 	var in []ingress
