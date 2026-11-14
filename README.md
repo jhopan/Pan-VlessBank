@@ -237,6 +237,14 @@ GET /api/backup  ZIP redacted: jumlah akun dan setting non-secret saja
 ```
 
 Validasi ingress menolak hostname yang berbagi port lokal. Setiap `socksN` dan `httpN` harus menuju port Xray berbeda. Backup sengaja tidak berisi `accounts.txt`, VLESS URI, login, auth proxy, token client, log, atau credential tunnel.
+
+### Operasi persistent
+
+Klik **Start Xray** menyimpan intent ke `webui.runtime.json`. Setelah panel atau host restart, Xray otomatis start lagi hanya jika intent aktif dan `config.json` ada. Klik **Stop Xray** menghapus intent ini.
+
+Di Linux, proxy tunnel dimiliki `pan-vlessbank-proxy-tunnel.service`, bukan child panel. Panel hanya start, stop, atau restart service tersebut. Tunnel tetap hidup saat `pan-vlessbank.service` restart dan kembali aktif saat boot.
+
+Token client dapat scope akun. Isi `1,3` saat membuat token untuk hanya memberi hostname akun 1 dan 3. Scope kosong berarti semua akun, dipakai demi kompatibilitas token lama.
 `format=text` keluarannya siap tempel:
 
 ```

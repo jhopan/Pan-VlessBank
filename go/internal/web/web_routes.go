@@ -54,7 +54,8 @@ func (s *Server) doGet(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, map[string]any{"error": "unauthorized"}, http.StatusUnauthorized)
 			return
 		}
-		writeJSON(w, map[string]any{"proxies": s.clientProxyList()}, http.StatusOK)
+		scope, _ := s.d.ClientTokens.Scope(strings.TrimSpace(strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")))
+		writeJSON(w, map[string]any{"proxies": s.clientProxyList(scope)}, http.StatusOK)
 		return
 	}
 	authed := s.authOK(r)
@@ -78,11 +79,7 @@ func (s *Server) doGet(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	switch path {
 	case "/api/health":
-		validation := ops.ReadTunnelValidation(s.tunPath())
-		set := s.set()
-		proxyTunnel := cf.TunnelRunning() || (set.TunnelID != "" && cf.TunnelConnections(set.TunnelID) > 0)
-		webTunnel := cf.WebTunnelRunning() || (set.WebTunnelID != "" && cf.TunnelConnections(set.WebTunnelID) > 0)
-		writeJSON(w, ops.Health(s.xrayRunning(), proxyTunnel, webTunnel, fileExists(s.cfgPath()), validation), http.StatusOK)
+		writeJSON(w, s.healthSnapshot(), http.StatusOK)
 		return
 	case "/api/client-tokens":
 		if s.d.ClientTokens == nil {
@@ -224,6 +221,21 @@ func (s *Server) doPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if path == "/api/backup/preview" {
+		b, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 1<<20))
+		if err != nil {
+			writeJSON(w, map[string]any{"error": "backup terlalu besar"}, http.StatusBadRequest)
+			return
+		}
+		preview, err := ops.PreviewBackup(b)
+		if err != nil {
+			writeJSON(w, map[string]any{"error": err.Error()}, http.StatusBadRequest)
+			return
+		}
+		s.audit("backup.preview")
+		writeJSON(w, preview, http.StatusOK)
+		return
+	}
 	f := form(r)
 	switch path {
 	case "/api/client-tokens":
@@ -237,7 +249,12 @@ func (s *Server) doPost(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, map[string]any{"error": "masa token harus 1 sampai 8760 jam"}, http.StatusBadRequest)
 			return
 		}
-		raw, record, err := s.d.ClientTokens.Create(label, time.Duration(hours)*time.Hour)
+		scope, err := accountScope(fval(f, "accounts", ""), len(s.rows()))
+		if err != nil {
+			writeJSON(w, map[string]any{"error": err.Error()}, http.StatusBadRequest)
+			return
+		}
+		raw, record, err := s.d.ClientTokens.CreateScoped(label, time.Duration(hours)*time.Hour, scope)
 		if err != nil {
 			writeJSON(w, map[string]any{"error": err.Error()}, http.StatusBadRequest)
 			return
@@ -280,13 +297,13 @@ func (s *Server) doPost(w http.ResponseWriter, r *http.Request) {
 		switch act := fval(f, "act", ""); act {
 		case "start":
 			s.audit("xray.start")
-			writeJSON(w, map[string]any{"action": "start", "result": s.d.Xray.Start()}, http.StatusOK)
+			writeJSON(w, map[string]any{"action": "start", "result": s.xrayStart()}, http.StatusOK)
 		case "stop":
 			s.audit("xray.stop")
-			writeJSON(w, map[string]any{"action": "stop", "result": s.d.Xray.Stop()}, http.StatusOK)
+			writeJSON(w, map[string]any{"action": "stop", "result": s.xrayStop()}, http.StatusOK)
 		case "restart":
 			s.audit("xray.restart")
-			writeJSON(w, map[string]any{"action": "restart", "result": s.d.Xray.Restart()}, http.StatusOK)
+			writeJSON(w, map[string]any{"action": "restart", "result": s.xrayRestart()}, http.StatusOK)
 		default:
 			writeJSON(w, map[string]any{"error": "act harus start/stop/restart"}, http.StatusBadRequest)
 		}
@@ -434,6 +451,21 @@ func (s *Server) doPost(w http.ResponseWriter, r *http.Request) {
 		return
 
 	case "/api/cf/tunnel":
+		if svc := s.proxyTunnelService(); svc != nil {
+			act := fval(f, "act", "")
+			if act != "start" && act != "stop" && act != "restart" {
+				writeJSON(w, map[string]any{"error": "act harus start/stop/restart"}, http.StatusBadRequest)
+				return
+			}
+			out, err := svc.Action(act)
+			if err != nil {
+				writeJSON(w, map[string]any{"error": strings.TrimSpace(out)}, http.StatusInternalServerError)
+				return
+			}
+			s.audit("proxy_tunnel." + act)
+			writeJSON(w, map[string]any{"result": strings.TrimSpace(out), "service": svc.Name()}, http.StatusOK)
+			return
+		}
 		switch act := fval(f, "act", ""); act {
 		case "start":
 			writeJSON(w, map[string]any{"result": cf.Start(s.tunPath())}, http.StatusOK)
@@ -588,4 +620,24 @@ func clamp(n, lo, hi int) int {
 		return hi
 	}
 	return n
+}
+
+func accountScope(raw string, count int) ([]int, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" || raw == "all" {
+		return nil, nil
+	}
+	seen := map[int]bool{}
+	out := []int{}
+	for _, part := range strings.Split(raw, ",") {
+		n, err := strconv.Atoi(strings.TrimSpace(part))
+		if err != nil || n < 1 || n > count {
+			return nil, fmt.Errorf("scope akun tidak valid")
+		}
+		if !seen[n] {
+			seen[n] = true
+			out = append(out, n)
+		}
+	}
+	return out, nil
 }

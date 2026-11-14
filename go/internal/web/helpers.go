@@ -270,20 +270,23 @@ func (s *Server) proxyList(only string) ([]map[string]any, string) {
 	return out, host
 }
 
-func (s *Server) clientProxyList() []map[string]any {
+func (s *Server) clientProxyList(scope []int) []map[string]any {
 	set := s.set()
 	if set.Tunnel == "" {
 		return []map[string]any{}
 	}
+	allowed := map[int]bool{}
+	for _, id := range scope {
+		allowed[id] = true
+	}
 	out := make([]map[string]any, 0)
 	for _, x := range s.rows() {
-		n := itoa(x.Idx + 1)
-		out = append(out, map[string]any{
-			"idx":        x.Idx + 1,
-			"name":       x.Name,
-			"socks_host": "socks" + n + "." + set.Tunnel,
-			"http_host":  "http" + n + "." + set.Tunnel,
-		})
+		idx := x.Idx + 1
+		if len(scope) > 0 && !allowed[idx] {
+			continue
+		}
+		n := itoa(idx)
+		out = append(out, map[string]any{"idx": idx, "name": x.Name, "socks_host": "socks" + n + "." + set.Tunnel, "http_host": "http" + n + "." + set.Tunnel})
 	}
 	return out
 }

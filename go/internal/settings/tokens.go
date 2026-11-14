@@ -15,12 +15,13 @@ import (
 )
 
 type ClientToken struct {
-	ID      string `json:"id"`
-	Label   string `json:"label"`
-	Hash    string `json:"hash,omitempty"`
-	Created int64  `json:"created"`
-	Exp     int64  `json:"exp"`
-	Revoked bool   `json:"revoked"`
+	ID       string `json:"id"`
+	Label    string `json:"label"`
+	Hash     string `json:"hash,omitempty"`
+	Accounts []int  `json:"accounts,omitempty"`
+	Created  int64  `json:"created"`
+	Exp      int64  `json:"exp"`
+	Revoked  bool   `json:"revoked"`
 }
 type ClientTokens struct {
 	path string
@@ -51,6 +52,9 @@ func (t *ClientTokens) save(v []ClientToken) error {
 	return os.WriteFile(t.path, b, 0600)
 }
 func (t *ClientTokens) Create(label string, ttl time.Duration) (string, ClientToken, error) {
+	return t.CreateScoped(label, ttl, nil)
+}
+func (t *ClientTokens) CreateScoped(label string, ttl time.Duration, accounts []int) (string, ClientToken, error) {
 	if label == "" {
 		return "", ClientToken{}, errors.New("label token kosong")
 	}
@@ -64,7 +68,7 @@ func (t *ClientTokens) Create(label string, ttl time.Duration) (string, ClientTo
 	}
 	raw := base64.RawURLEncoding.EncodeToString(rawb)
 	now := time.Now().Unix()
-	r := ClientToken{ID: hex.EncodeToString(idb), Label: label, Hash: tokenHash(raw), Created: now, Exp: now + int64(ttl.Seconds())}
+	r := ClientToken{ID: hex.EncodeToString(idb), Label: label, Hash: tokenHash(raw), Accounts: append([]int(nil), accounts...), Created: now, Exp: now + int64(ttl.Seconds())}
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	v := append(t.load(), r)
@@ -88,6 +92,22 @@ func (t *ClientTokens) Check(raw string) bool {
 		}
 	}
 	return false
+}
+
+func (t *ClientTokens) Scope(raw string) ([]int, bool) {
+	if raw == "" {
+		return nil, false
+	}
+	want := tokenHash(raw)
+	now := time.Now().Unix()
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	for _, r := range t.load() {
+		if !r.Revoked && r.Exp > now && subtle.ConstantTimeCompare([]byte(r.Hash), []byte(want)) == 1 {
+			return append([]int(nil), r.Accounts...), true
+		}
+	}
+	return nil, false
 }
 func (t *ClientTokens) List() []ClientToken {
 	t.mu.Lock()

@@ -83,6 +83,7 @@ func newEnv(t *testing.T) *env {
 		Login:        login,
 		Sessions:     settings.NewSessions(filepath.Join(dir, "webui.sessions")),
 		ClientTokens: settings.NewClientTokens(filepath.Join(dir, "webui.client-tokens.json")),
+		Runtime:      settings.NewRuntime(filepath.Join(dir, "webui.runtime.json")),
 		Xray:         mgr,
 		Accounts: func() []config.Account {
 			accs, _, _ := config.ParseFile(acc)
@@ -730,5 +731,18 @@ func TestClientTokenListAndRevokeRequireAdmin(t *testing.T) {
 	}
 	if w = req(t, e.srv, http.MethodGet, "/api/client-tokens", "", nil); w.Code != http.StatusUnauthorized {
 		t.Fatalf("unauthed list: %d", w.Code)
+	}
+}
+
+func TestClientProxyAPIFiltersTokenScope(t *testing.T) {
+	e := newEnv(t)
+	e.st.settings.Tunnel = "proxy.example.com"
+	raw, _, err := e.srv.d.ClientTokens.CreateScoped("account-two", time.Hour, []int{2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	w := req(t, e.srv, http.MethodGet, "/api/client/proxies", "", map[string]string{"Authorization": "Bearer " + raw})
+	if w.Code != http.StatusOK || strings.Contains(w.Body.String(), `"idx":1`) || !strings.Contains(w.Body.String(), `"idx":2`) {
+		t.Fatalf("scope response: %d %s", w.Code, w.Body.String())
 	}
 }

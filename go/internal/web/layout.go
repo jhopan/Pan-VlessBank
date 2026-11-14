@@ -188,10 +188,10 @@ function clientTokenList(){
   }).catch(function(){out.textContent='gagal memuat token';});
 }
 function clientTokenCreate(){
-  var label=document.getElementById('ct-label'),hours=document.getElementById('ct-hours'),out=document.getElementById('ct-result');
+  var label=document.getElementById('ct-label'),hours=document.getElementById('ct-hours'),accounts=document.getElementById('ct-accounts'),out=document.getElementById('ct-result');
   if(!label||!label.value.trim()){flash('isi label perangkat',false);label.focus();return;}
-  api('/api/client-tokens','label='+encodeURIComponent(label.value.trim())+'&hours='+encodeURIComponent(hours.value)).then(function(j){
-    if(!j.token)return; out.hidden=false;out.textContent='Salin sekarang, token tidak akan tampil lagi:\n'+j.token;label.value='';clientTokenList();
+  api('/api/client-tokens','label='+encodeURIComponent(label.value.trim())+'&hours='+encodeURIComponent(hours.value)+'&accounts='+encodeURIComponent(accounts.value.trim())).then(function(j){
+    if(!j.token)return; out.hidden=false;out.textContent='Salin sekarang, token tidak akan tampil lagi:\n'+j.token;label.value='';accounts.value='';clientTokenList();
   }).catch(function(){});
 }
 function clientTokenRevoke(id){if(!confirm('cabut token '+id+'?'))return;api('/api/client-tokens/revoke','id='+encodeURIComponent(id)).then(function(){clientTokenList();}).catch(function(){});}

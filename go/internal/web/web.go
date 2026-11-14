@@ -10,48 +10,52 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
 
+	"vlessbank/internal/cf"
 	"vlessbank/internal/config"
 	"vlessbank/internal/ops"
+	"vlessbank/internal/service"
 	"vlessbank/internal/settings"
 	"vlessbank/internal/xray"
 )
 
 // Deps adalah seluruh ketergantungan panel (lihat kontrak).
 type Deps struct {
-	Dir           string // HERE: folder accounts.txt, config.json, ...
-	Port          int    // port panel aktual, target loopback tunnel WebUI
-	DefaultXray   string // default flag --xray
-	Settings      func() settings.Settings
-	SaveSettings  func(settings.Settings) error
-	Login         settings.Login
-	Sessions      *settings.Sessions
-	ClientTokens  *settings.ClientTokens
-	Xray          *xray.Manager
-	Accounts      func() []config.Account
-	Binds         func() []config.Bind
-	Regen         func() string
-	AddAccounts   func(links []string) map[string]any
-	DeleteAccount func(line int) bool
-	IPTest        func(port int) string
-	IPAll         func() map[string]string
+	Dir                string
+	Port               int
+	DefaultXray        string
+	Settings           func() settings.Settings
+	SaveSettings       func(settings.Settings) error
+	Login              settings.Login
+	Sessions           *settings.Sessions
+	ClientTokens       *settings.ClientTokens
+	Runtime            *settings.RuntimeStore
+	ProxyTunnelService string
+	Xray               *xray.Manager
+	Accounts           func() []config.Account
+	Binds              func() []config.Bind
+	Regen              func() string
+	AddAccounts        func([]string) map[string]any
+	DeleteAccount      func(int) bool
+	IPTest             func(int) string
+	IPAll              func() map[string]string
 }
 
 // Server mengimplementasikan http.Handler.
 type Server struct {
-	d Deps
-
-	loginMu sync.RWMutex
-	login   settings.Login
+	d          Deps
+	loginMu    sync.RWMutex
+	login      settings.Login
+	healthMu   sync.Mutex
+	lastHealth map[string]any
 }
 
-func New(d Deps) *Server {
-	return &Server{d: d, login: d.Login}
-}
+func New(d Deps) *Server { return &Server{d: d, login: d.Login} }
 
 // ---------- path & setting ----------
 
@@ -69,7 +73,57 @@ func (s *Server) auditPath() string { return s.path("webui.audit.jsonl") }
 
 func (s *Server) audit(action string)  { _ = ops.AppendAudit(s.auditPath(), action, "") }
 func (s *Server) settingsPath() string { return s.path("webui.settings.json") }
-func (s *Server) xrayRunning() bool    { return s.d.Xray.Running() }
+
+func (s *Server) xrayStart() string {
+	result := s.d.Xray.Start()
+	if s.d.Xray.Running() && s.d.Runtime != nil {
+		_ = s.d.Runtime.SetXrayEnabled(true)
+	}
+	return result
+}
+
+func (s *Server) xrayStop() string {
+	if s.d.Runtime != nil {
+		_ = s.d.Runtime.SetXrayEnabled(false)
+	}
+	return s.d.Xray.Stop()
+}
+
+func (s *Server) xrayRestart() string {
+	if s.d.Runtime != nil {
+		_ = s.d.Runtime.SetXrayEnabled(true)
+	}
+	return s.d.Xray.Restart()
+}
+func (s *Server) xrayRunning() bool { return s.d.Xray.Running() }
+
+func (s *Server) proxyTunnelService() *service.Manager {
+	if s.d.ProxyTunnelService == "" {
+		return nil
+	}
+	return service.New(func(args ...string) (string, error) {
+		out, err := exec.Command("systemctl", args...).CombinedOutput()
+		return string(out), err
+	}, s.d.ProxyTunnelService)
+}
+
+func (s *Server) healthSnapshot() map[string]any {
+	validation := ops.ReadTunnelValidation(s.tunPath())
+	set := s.set()
+	proxyTunnel := cf.TunnelRunning() || (set.TunnelID != "" && cf.TunnelConnections(set.TunnelID) > 0)
+	webTunnel := cf.WebTunnelRunning() || (set.WebTunnelID != "" && cf.TunnelConnections(set.WebTunnelID) > 0)
+	current := ops.Health(s.xrayRunning(), proxyTunnel, webTunnel, fileExists(s.cfgPath()), validation)
+	s.healthMu.Lock()
+	changed := ops.HealthChanged(s.lastHealth, current)
+	s.lastHealth = current
+	s.healthMu.Unlock()
+	if changed {
+		s.audit("health.transition")
+	}
+	return current
+}
+
+func (s *Server) MonitorHealth() { _ = s.healthSnapshot() }
 
 // cfCredDir sama dengan CF.CF_DIR di cf.py: ~/.cloudflared.
 func (s *Server) cfCredDir() string {

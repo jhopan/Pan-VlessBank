@@ -70,6 +70,7 @@ const settingsTmpl = `
 <p class="hint">Token hanya memberi akses hostname SOCKS dan HTTP publik. Nilai token muncul sekali, simpan langsung di client.</p>
 <label>Label perangkat</label><input id="ct-label" placeholder="camoufox-laptop" style="width:280px">
 <label>Masa aktif (jam, maksimal 8760)</label><input id="ct-hours" type="number" min="1" max="8760" value="720" style="width:140px">
+<label>Scope akun, kosong untuk semua</label><input id="ct-accounts" placeholder="contoh: 1,3" style="width:280px">
 <div class="btnrow"><button type="button" onclick="clientTokenCreate()">Buat Token Client</button><button class="sec" type="button" onclick="backupDownload()">Unduh Backup Redacted</button></div>
 <pre id="ct-result" hidden></pre><div id="ct-list" class="hint">memuat token...</div></div>
 <div class="card"><h2>Operasi</h2><div class="btnrow"><button type="button" class="sec" onclick="healthLoad()">Cek Health</button><button type="button" class="sec" onclick="auditLoad()">Baca Audit</button></div><pre id="ops-result" hidden></pre></div>

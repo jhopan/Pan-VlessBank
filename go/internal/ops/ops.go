@@ -67,15 +67,18 @@ func ValidateProxyTunnel(raw []byte) TunnelValidation {
 	return out
 }
 
-type auditEvent struct {
-	Time    string `json:"time"`
-	Action  string `json:"action"`
-	Summary string `json:"summary"`
+type AuditEvent struct {
+	Time   string `json:"time"`
+	Actor  string `json:"actor"`
+	Action string `json:"action"`
+	Result string `json:"result"`
 }
 
 func AppendAudit(path, action, summary string) error {
-	_ = summary
-	rec := auditEvent{Time: time.Now().UTC().Format(time.RFC3339), Action: action, Summary: "event recorded"}
+	return AppendAuditResult(path, "admin", action, "ok")
+}
+func AppendAuditResult(path, actor, action, result string) error {
+	rec := AuditEvent{Time: time.Now().UTC().Format(time.RFC3339), Actor: actor, Action: action, Result: result}
 	b, e := json.Marshal(rec)
 	if e != nil {
 		return e
@@ -88,18 +91,18 @@ func AppendAudit(path, action, summary string) error {
 	_, e = f.Write(append(b, '\n'))
 	return e
 }
-func TailAudit(path string, n int) []auditEvent {
+func TailAudit(path string, n int) []AuditEvent {
 	b, e := os.ReadFile(path)
 	if e != nil {
-		return []auditEvent{}
+		return []AuditEvent{}
 	}
 	lines := strings.Split(strings.TrimSpace(string(b)), "\n")
 	if n > 0 && len(lines) > n {
 		lines = lines[len(lines)-n:]
 	}
-	out := make([]auditEvent, 0, len(lines))
+	out := make([]AuditEvent, 0, len(lines))
 	for _, line := range lines {
-		var r auditEvent
+		var r AuditEvent
 		if json.Unmarshal([]byte(line), &r) == nil {
 			out = append(out, r)
 		}

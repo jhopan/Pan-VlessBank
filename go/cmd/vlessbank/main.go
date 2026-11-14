@@ -464,6 +464,7 @@ func runServe(args []string) {
 	a.sessions = settings.NewSessions(filepath.Join(wd, "webui.sessions"))
 	a.mgr = xray.New(a.configFile(), a.xrayLog(), *xrayFlag, a.findXray)
 	clientTokens := settings.NewClientTokens(filepath.Join(wd, "webui.client-tokens.json"))
+	runtimeState := settings.NewRuntime(filepath.Join(wd, "webui.runtime.json"))
 
 	srv := web.New(web.Deps{
 		Dir:         wd,
@@ -483,7 +484,14 @@ func runServe(args []string) {
 		Login:        login,
 		Sessions:     a.sessions,
 		ClientTokens: clientTokens,
-		Xray:         a.mgr,
+		Runtime:      runtimeState,
+		ProxyTunnelService: func() string {
+			if runtime.GOOS == "linux" {
+				return "pan-vlessbank-proxy-tunnel.service"
+			}
+			return ""
+		}(),
+		Xray: a.mgr,
 		Accounts: func() []config.Account {
 			accs, _, _ := config.ParseFile(a.accountsFile())
 			return accs
@@ -509,6 +517,18 @@ func runServe(args []string) {
 			return netcheck.IPAllAuth(ports, a.mgr.Running(), user, pass)
 		},
 	})
+	if runtimeState.Load().XrayEnabled {
+		if st, err := os.Stat(a.configFile()); err == nil && !st.IsDir() {
+			fmt.Println(a.mgr.Start())
+		}
+	}
+	go func() {
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+		for range ticker.C {
+			srv.MonitorHealth()
+		}
+	}()
 
 	addr := net.JoinHostPort(*listen, strconv.Itoa(*port))
 	httpSrv := &http.Server{Addr: addr, Handler: srv}

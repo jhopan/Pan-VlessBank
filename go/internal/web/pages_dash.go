@@ -34,7 +34,7 @@ func (s *Server) bodyDash() string {
 	lan := lanIP()
 	authLine := `<span class="badge expired">tanpa auth</span>`
 	if set.Auth != "" {
-		authLine = `<code>` + esc(set.Auth) + `</code>`
+		authLine = `<span class="badge paid">aktif</span>`
 	}
 	return fill(dashTmpl,
 		"@@NA@@", itoa(len(rs)),
