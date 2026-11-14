@@ -463,6 +463,7 @@ func runServe(args []string) {
 	a.login = login
 	a.sessions = settings.NewSessions(filepath.Join(wd, "webui.sessions"))
 	a.mgr = xray.New(a.configFile(), a.xrayLog(), *xrayFlag, a.findXray)
+	clientTokens := settings.NewClientTokens(filepath.Join(wd, "webui.client-tokens.json"))
 
 	srv := web.New(web.Deps{
 		Dir:         wd,
@@ -479,9 +480,10 @@ func runServe(args []string) {
 			a.mu.Unlock()
 			return settings.SaveSettings(a.settingsFile(), s)
 		},
-		Login:    login,
-		Sessions: a.sessions,
-		Xray:     a.mgr,
+		Login:        login,
+		Sessions:     a.sessions,
+		ClientTokens: clientTokens,
+		Xray:         a.mgr,
 		Accounts: func() []config.Account {
 			accs, _, _ := config.ParseFile(a.accountsFile())
 			return accs

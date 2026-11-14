@@ -210,17 +210,33 @@ vless asli). Butuh `xray` + `cloudflared` tetap seperti biasa (folder yang sama,
 Pengaturan). `install.sh` membangun binary ini kalau belum ada, mengunduh kedua binary, lalu
 menjalankan `./vlessbank --port ... --listen ... --dir ...`.
 
-## API tarik daftar proxy
+## API client read-only
 
-Selain panel, ada endpoint JSON/teks untuk aplikasi lain yang mau "narik" daftar proxy
-(auth sama seperti `/api/*`: Basic auth panel, atau cookie sesi `vb_session`):
+`/api/proxies` tetap API admin, memakai Basic auth panel atau cookie sesi dan dapat menampilkan data LAN. Jangan masukkan kredensial admin ke client.
+
+Buat token client terbatas dari API admin. Nilai `token` hanya muncul sekali; server hanya menyimpan hash token di `webui.client-tokens.json` permission `0600`.
 
 ```bash
-curl -u admin:admin http://192.168.42.124:9000/api/proxies                  # JSON lengkap
-curl -u admin:admin "http://192.168.42.124:9000/api/proxies?only=socks"     # SOCKS saja
-curl -u admin:admin "http://192.168.42.124:9000/api/proxies?format=text"    # URI per baris
+curl -u admin:password -X POST https://panel.example.com/api/client-tokens \
+  -d 'label=camoufox-laptop&hours=720'
+curl -H 'Authorization: Bearer TOKEN_CLIENT' \
+  https://panel.example.com/api/client/proxies
+curl -u admin:password https://panel.example.com/api/client-tokens
+curl -u admin:password -X POST https://panel.example.com/api/client-tokens/revoke \
+  -d 'id=TOKEN_ID'
 ```
 
+`/api/client/proxies` hanya mengembalikan `idx`, `name`, `socks_host`, dan `http_host`. Tidak mengirim link VLESS, upstream, IP LAN, port Xray, auth proxy, credential tunnel, atau token Cloudflare.
+
+Endpoint admin operasi:
+
+```text
+GET /api/health  status Xray, tunnel proxy, tunnel WebUI, config, dan validasi ingress
+GET /api/audit   100 event operasi terakhir, tanpa secret
+GET /api/backup  ZIP redacted: jumlah akun dan setting non-secret saja
+```
+
+Validasi ingress menolak hostname yang berbagi port lokal. Setiap `socksN` dan `httpN` harus menuju port Xray berbeda. Backup sengaja tidak berisi `accounts.txt`, VLESS URI, login, auth proxy, token client, log, atau credential tunnel.
 `format=text` keluarannya siap tempel:
 
 ```

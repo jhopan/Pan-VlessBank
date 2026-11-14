@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"vlessbank/internal/config"
 	"vlessbank/internal/settings"
@@ -79,9 +80,10 @@ func newEnv(t *testing.T) *env {
 			st.saved = append(st.saved, s)
 			return nil
 		},
-		Login:    login,
-		Sessions: settings.NewSessions(filepath.Join(dir, "webui.sessions")),
-		Xray:     mgr,
+		Login:        login,
+		Sessions:     settings.NewSessions(filepath.Join(dir, "webui.sessions")),
+		ClientTokens: settings.NewClientTokens(filepath.Join(dir, "webui.client-tokens.json")),
+		Xray:         mgr,
 		Accounts: func() []config.Account {
 			accs, _, _ := config.ParseFile(acc)
 			return accs
@@ -662,5 +664,71 @@ func TestAPIProxies(t *testing.T) {
 	w = req(t, e.srv, http.MethodGet, "/api/proxies?only=socks", "", a)
 	if strings.Contains(w.Body.String(), `"http"`) {
 		t.Fatalf("only=socks masih memuat http: %s", w.Body.String())
+	}
+}
+
+func TestClientProxyAPIOnlyReturnsPublicEndpoints(t *testing.T) {
+	e := newEnv(t)
+	e.st.settings.Tunnel = "proxy.example.com"
+	store := settings.NewClientTokens(filepath.Join(t.TempDir(), "webui.client-tokens.json"))
+	raw, _, err := store.Create("camoufox", time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.srv.d.ClientTokens = store
+	w := req(t, e.srv, http.MethodGet, "/api/client/proxies", "", map[string]string{"Authorization": "Bearer " + raw})
+	if w.Code != http.StatusOK {
+		t.Fatalf("code=%d body=%s", w.Code, w.Body.String())
+	}
+	if strings.Contains(w.Body.String(), "upstream") || strings.Contains(w.Body.String(), "access_socks") || strings.Contains(w.Body.String(), "127.0.0.1") {
+		t.Fatalf("restricted response leaked: %s", w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "socks_host") || !strings.Contains(w.Body.String(), "http_host") {
+		t.Fatalf("missing public endpoints: %s", w.Body.String())
+	}
+}
+
+func TestAdminOperationsAPIs(t *testing.T) {
+	e := newEnv(t)
+	e.st.settings.Tunnel = "proxy.example.com"
+	admin := map[string]string{"Authorization": basic(testUser, testPass)}
+	w := req(t, e.srv, http.MethodPost, "/api/client-tokens", "label=camoufox&hours=24", admin)
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"token"`) {
+		t.Fatalf("create token: %d %s", w.Code, w.Body.String())
+	}
+	if w = req(t, e.srv, http.MethodGet, "/api/health", "", admin); w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"tunnel"`) {
+		t.Fatalf("health: %d %s", w.Code, w.Body.String())
+	}
+	if w = req(t, e.srv, http.MethodGet, "/api/backup", "", admin); w.Code != http.StatusOK || !strings.Contains(w.Header().Get("Content-Type"), "application/zip") {
+		t.Fatalf("backup: %d %s", w.Code, w.Header().Get("Content-Type"))
+	}
+	if w = req(t, e.srv, http.MethodGet, "/api/health", "", nil); w.Code != http.StatusUnauthorized {
+		t.Fatalf("unauthed health: %d", w.Code)
+	}
+}
+
+func TestClientTokenListAndRevokeRequireAdmin(t *testing.T) {
+	e := newEnv(t)
+	admin := map[string]string{"Authorization": basic(testUser, testPass)}
+	w := req(t, e.srv, http.MethodPost, "/api/client-tokens", "label=camoufox&hours=24", admin)
+	if w.Code != http.StatusOK {
+		t.Fatalf("create: %d", w.Code)
+	}
+	var body struct {
+		Record struct {
+			ID string `json:"id"`
+		} `json:"record"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if w = req(t, e.srv, http.MethodGet, "/api/client-tokens", "", admin); w.Code != http.StatusOK || !strings.Contains(w.Body.String(), body.Record.ID) {
+		t.Fatalf("list: %d %s", w.Code, w.Body.String())
+	}
+	if w = req(t, e.srv, http.MethodPost, "/api/client-tokens/revoke", "id="+body.Record.ID, admin); w.Code != http.StatusOK {
+		t.Fatalf("revoke: %d %s", w.Code, w.Body.String())
+	}
+	if w = req(t, e.srv, http.MethodGet, "/api/client-tokens", "", nil); w.Code != http.StatusUnauthorized {
+		t.Fatalf("unauthed list: %d", w.Code)
 	}
 }

@@ -270,6 +270,24 @@ func (s *Server) proxyList(only string) ([]map[string]any, string) {
 	return out, host
 }
 
+func (s *Server) clientProxyList() []map[string]any {
+	set := s.set()
+	if set.Tunnel == "" {
+		return []map[string]any{}
+	}
+	out := make([]map[string]any, 0)
+	for _, x := range s.rows() {
+		n := itoa(x.Idx + 1)
+		out = append(out, map[string]any{
+			"idx":        x.Idx + 1,
+			"name":       x.Name,
+			"socks_host": "socks" + n + "." + set.Tunnel,
+			"http_host":  "http" + n + "." + set.Tunnel,
+		})
+	}
+	return out
+}
+
 // proxyText = format teks: satu URI per baris (siap tempel ke aplikasi).
 func (s *Server) proxyText(only string) string {
 	list, _ := s.proxyList(only)

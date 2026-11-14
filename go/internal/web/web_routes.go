@@ -10,9 +10,11 @@ import (
 	"runtime/debug"
 	"strconv"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"vlessbank/internal/cf"
+	"vlessbank/internal/ops"
 	"vlessbank/internal/settings"
 )
 
@@ -47,6 +49,14 @@ func (s *Server) doGet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if path == "/api/client/proxies" {
+		if !s.clientTokenOK(r) {
+			writeJSON(w, map[string]any{"error": "unauthorized"}, http.StatusUnauthorized)
+			return
+		}
+		writeJSON(w, map[string]any{"proxies": s.clientProxyList()}, http.StatusOK)
+		return
+	}
 	authed := s.authOK(r)
 	if (path == "/" || path == "/login") && authed {
 		redirect(w, "/admin")
@@ -67,6 +77,32 @@ func (s *Server) doGet(w http.ResponseWriter, r *http.Request) {
 
 	q := r.URL.Query()
 	switch path {
+	case "/api/health":
+		validation := ops.ReadTunnelValidation(s.tunPath())
+		writeJSON(w, ops.Health(s.xrayRunning(), cf.TunnelRunning(), cf.WebTunnelRunning(), fileExists(s.cfgPath()), validation), http.StatusOK)
+		return
+	case "/api/client-tokens":
+		if s.d.ClientTokens == nil {
+			writeJSON(w, map[string]any{"tokens": []any{}}, http.StatusOK)
+			return
+		}
+		writeJSON(w, map[string]any{"tokens": s.d.ClientTokens.List()}, http.StatusOK)
+		return
+	case "/api/audit":
+		writeJSON(w, map[string]any{"events": ops.TailAudit(s.auditPath(), 100)}, http.StatusOK)
+		return
+	case "/api/backup":
+		b, err := ops.RedactedBackup(s.d.Dir, len(s.rows()))
+		if err != nil {
+			writeJSON(w, map[string]any{"error": err.Error()}, http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/zip")
+		w.Header().Set("Content-Disposition", "attachment; filename=pan-vlessbank-backup.zip")
+		w.Header().Set("Content-Length", strconv.Itoa(len(b)))
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(b)
+		return
 	case "/api/status":
 		set := s.set()
 		writeJSON(w, map[string]any{
@@ -187,6 +223,37 @@ func (s *Server) doPost(w http.ResponseWriter, r *http.Request) {
 
 	f := form(r)
 	switch path {
+	case "/api/client-tokens":
+		if s.d.ClientTokens == nil {
+			writeJSON(w, map[string]any{"error": "token client belum tersedia"}, http.StatusServiceUnavailable)
+			return
+		}
+		label := strings.TrimSpace(fval(f, "label", ""))
+		hours, err := strconv.Atoi(fval(f, "hours", "720"))
+		if err != nil || hours < 1 || hours > 24*365 {
+			writeJSON(w, map[string]any{"error": "masa token harus 1 sampai 8760 jam"}, http.StatusBadRequest)
+			return
+		}
+		raw, record, err := s.d.ClientTokens.Create(label, time.Duration(hours)*time.Hour)
+		if err != nil {
+			writeJSON(w, map[string]any{"error": err.Error()}, http.StatusBadRequest)
+			return
+		}
+		s.audit("client_token.create")
+		writeJSON(w, map[string]any{"token": raw, "record": record}, http.StatusOK)
+		return
+	case "/api/client-tokens/revoke":
+		if s.d.ClientTokens == nil {
+			writeJSON(w, map[string]any{"error": "token client belum tersedia"}, http.StatusServiceUnavailable)
+			return
+		}
+		if err := s.d.ClientTokens.Revoke(strings.TrimSpace(fval(f, "id", ""))); err != nil {
+			writeJSON(w, map[string]any{"error": err.Error()}, http.StatusBadRequest)
+			return
+		}
+		s.audit("client_token.revoke")
+		writeJSON(w, map[string]any{"ok": true}, http.StatusOK)
+		return
 	case "/api/add":
 		links := linkLines(fval(f, "links", ""))
 		ok := vlessLinks(links)
@@ -209,10 +276,13 @@ func (s *Server) doPost(w http.ResponseWriter, r *http.Request) {
 	case "/api/xray":
 		switch act := fval(f, "act", ""); act {
 		case "start":
+			s.audit("xray.start")
 			writeJSON(w, map[string]any{"action": "start", "result": s.d.Xray.Start()}, http.StatusOK)
 		case "stop":
+			s.audit("xray.stop")
 			writeJSON(w, map[string]any{"action": "stop", "result": s.d.Xray.Stop()}, http.StatusOK)
 		case "restart":
+			s.audit("xray.restart")
 			writeJSON(w, map[string]any{"action": "restart", "result": s.d.Xray.Restart()}, http.StatusOK)
 		default:
 			writeJSON(w, map[string]any{"error": "act harus start/stop/restart"}, http.StatusBadRequest)

@@ -173,5 +173,34 @@ function del(line, nm){
     });
   }).catch(function(){});
 }
+function htmlEscape(s){var d=document.createElement('div');d.textContent=s;return d.innerHTML;}
+function apiGet(p){
+  return fetch(p,{headers:authH()}).then(function(r){
+    if(r.status===401){sessionStorage.removeItem('vbauth');location.href='/login';throw 'unauth';}
+    return r.json().then(function(j){if(j&&j.error)flash(j.error,false);return j;});
+  });
+}
+function clientTokenList(){
+  var out=document.getElementById('ct-list'); if(!out)return;
+  apiGet('/api/client-tokens').then(function(j){
+    var a=j.tokens||[]; if(!a.length){out.textContent='belum ada token client';return;}
+    out.innerHTML=a.map(function(t){return '<div class="chip"><code>'+htmlEscape(t.label)+' · '+htmlEscape(t.id)+' · '+(t.revoked?'dicabut':'aktif')+'</code><button class="cp" onclick="clientTokenRevoke(\''+htmlEscape(t.id)+'\')">cabut</button></div>';}).join('');
+  }).catch(function(){out.textContent='gagal memuat token';});
+}
+function clientTokenCreate(){
+  var label=document.getElementById('ct-label'),hours=document.getElementById('ct-hours'),out=document.getElementById('ct-result');
+  if(!label||!label.value.trim()){flash('isi label perangkat',false);label.focus();return;}
+  api('/api/client-tokens','label='+encodeURIComponent(label.value.trim())+'&hours='+encodeURIComponent(hours.value)).then(function(j){
+    if(!j.token)return; out.hidden=false;out.textContent='Salin sekarang, token tidak akan tampil lagi:\n'+j.token;label.value='';clientTokenList();
+  }).catch(function(){});
+}
+function clientTokenRevoke(id){if(!confirm('cabut token '+id+'?'))return;api('/api/client-tokens/revoke','id='+encodeURIComponent(id)).then(function(){clientTokenList();}).catch(function(){});}
+function opsShow(v){var out=document.getElementById('ops-result');if(out){out.hidden=false;out.textContent=JSON.stringify(v,null,2);}}
+function healthLoad(){apiGet('/api/health').then(opsShow).catch(function(){});}
+function auditLoad(){apiGet('/api/audit').then(opsShow).catch(function(){});}
+function backupDownload(){
+  fetch('/api/backup',{headers:authH()}).then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.blob();}).then(function(b){var a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='pan-vlessbank-backup.zip';a.click();URL.revokeObjectURL(a.href);}).catch(function(e){flash('backup gagal: '+e,false);});
+}
+if(location.pathname==='/admin/settings'){clientTokenList();}
 </script>
 </body></html>`

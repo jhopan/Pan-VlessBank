@@ -16,6 +16,7 @@ import (
 	"sync"
 
 	"vlessbank/internal/config"
+	"vlessbank/internal/ops"
 	"vlessbank/internal/settings"
 	"vlessbank/internal/xray"
 )
@@ -29,6 +30,7 @@ type Deps struct {
 	SaveSettings  func(settings.Settings) error
 	Login         settings.Login
 	Sessions      *settings.Sessions
+	ClientTokens  *settings.ClientTokens
 	Xray          *xray.Manager
 	Accounts      func() []config.Account
 	Binds         func() []config.Bind
@@ -57,11 +59,15 @@ func (s *Server) set() settings.Settings { return s.d.Settings() }
 
 func (s *Server) path(name string) string { return filepath.Join(s.d.Dir, name) }
 
-func (s *Server) cfgPath() string      { return s.path("config.json") }
-func (s *Server) tunPath() string      { return s.path("config.tunnel.yml") }
-func (s *Server) webTunPath() string   { return s.path("webui.tunnel.yml") }
-func (s *Server) loginPath() string    { return s.path("webui.login") }
-func (s *Server) accPath() string      { return s.path("accounts.txt") }
+func (s *Server) cfgPath() string    { return s.path("config.json") }
+func (s *Server) tunPath() string    { return s.path("config.tunnel.yml") }
+func (s *Server) webTunPath() string { return s.path("webui.tunnel.yml") }
+func (s *Server) loginPath() string  { return s.path("webui.login") }
+func (s *Server) accPath() string    { return s.path("accounts.txt") }
+
+func (s *Server) auditPath() string { return s.path("webui.audit.jsonl") }
+
+func (s *Server) audit(action string)  { _ = ops.AppendAudit(s.auditPath(), action, "") }
 func (s *Server) settingsPath() string { return s.path("webui.settings.json") }
 func (s *Server) xrayRunning() bool    { return s.d.Xray.Running() }
 
@@ -133,6 +139,17 @@ func (s *Server) authOK(r *http.Request) bool {
 		return false
 	}
 	return s.d.Sessions.Check(tok)
+}
+
+func (s *Server) clientTokenOK(r *http.Request) bool {
+	if s.d.ClientTokens == nil {
+		return false
+	}
+	h := r.Header.Get("Authorization")
+	if !strings.HasPrefix(h, "Bearer ") {
+		return false
+	}
+	return s.d.ClientTokens.Check(strings.TrimSpace(strings.TrimPrefix(h, "Bearer ")))
 }
 
 // ---------- writer ----------
