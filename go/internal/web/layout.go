@@ -43,7 +43,7 @@ const layoutTmpl = `<!doctype html><html lang="id"><head><meta charset="utf-8">
 <div class="sidebar">
 <div class="brand"><div class="dot">V</div><div><b>Vlessbank</b><small>by JhopanStore</small></div></div>
 <div class="menu">@@MENU@@</div>
-<div class="foot">v0.2 · JhopanStore</div>
+<div class="foot">JhopanStore</div>
 </div>
 <div class="main">
 <header><h1>@@TITLE@@</h1>
