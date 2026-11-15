@@ -1,320 +1,257 @@
 # Pan-VlessBank
 
-Banyak akun `vless://` -> satu proses Xray -> 1 akun = 2 port: **SOCKS5 + HTTP proxy**.
+Pan-VlessBank mengubah daftar `vless://` menjadi satu konfigurasi Xray. Setiap akun mendapat dua inbound, SOCKS5 dan HTTP, yang keduanya route ke outbound VLESS akun itu. Satu port akun berarti satu jalur exit yang tetap.
 
-```
-accounts.txt (link vless, 1 baris 1 akun)
-     |
-     v
-./vlessbank gen  ->  config.json (+ config.tunnel.yml jika mode tunnel)
-     |
-     v
-xray run -c config.json
-     |
-     +--> 127.0.0.1:1081 (SOCKS5)  -> akun 1
-     +--> 127.0.0.1:2081 (HTTP)    -> akun 1
-     +--> 127.0.0.1:1082 (SOCKS5)  -> akun 2
-     +--> 127.0.0.1:2082 (HTTP)    -> akun 2
-     ...
-```
+Runtime utama satu binary Go statis, tanpa dependensi runtime Go pihak ketiga.
 
-Semua dijalankan dari satu binary Go `vlessbank` (stdlib only, tanpa dependensi): panel web, generator
-config, uji IP akun, dan client tunnel. Binary yang sama dipakai di Windows (`vlessbank.exe`) dan di
-STB/Linux (`GOOS=linux GOARCH=arm64`).
+> [!WARNING]
+> `accounts.txt`, credential proxy, token client, dan credential Tunnel adalah rahasia. Jangan commit, kirim lewat chat, atau masukkan ke contoh dokumentasi.
 
-Port SOCKS = `base  + i` (default 1081). Port HTTP = `base+1000 + i` (default 2081).
-Dua inbound route ke SAMA outbound -> IP keluar identik per akun. IP stabil per port -- cocok untuk sesi login/banking.
+## Arsitektur
 
-## Install binary release
-
-Rilis memiliki dua channel:
-
-- `vX.Y.Z`: release versioned, aset tidak berubah.
-- `latest`: release rolling dari tag versioned terakhir.
-
-Installer mengunduh binary `latest`, memverifikasi SHA-256, meminta port panel, lalu membuat konfigurasi LAN (`0.0.0.0`). Karena proxy LAN terbuka berbahaya, installer wajib meminta `user:pass` untuk proxy.
-
-```bash
-# Linux, macOS, Termux, atau Windows Git Bash
-curl -fsSL https://raw.githubusercontent.com/jhopan/Pan-VlessBank/master/install.sh | bash
-
-# Windows PowerShell
-irm https://raw.githubusercontent.com/jhopan/Pan-VlessBank/master/install.ps1 | iex
+```text
+accounts.txt
+  │
+  ├─ vlessbank gen / Panel Regenerate
+  ▼
+config.json + config.tunnel.yml
+  │
+  ├─ Xray
+  │   ├─ 127.0.0.1:1081 SOCKS5 ─┐ akun 1 ── VLESS upstream ── exit IP akun 1
+  │   ├─ 127.0.0.1:2081 HTTP   ─┘
+  │   ├─ 127.0.0.1:1082 SOCKS5 ─┐ akun 2 ── VLESS upstream ── exit IP akun 2
+  │   └─ 127.0.0.1:2082 HTTP   ─┘
+  │
+  └─ cloudflared Tunnel
+      socks2.example.com ── tcp://localhost:1082
+      http2.example.com  ── tcp://localhost:2082
 ```
 
-Gunakan channel versi tetap dengan `VLESSBANK_RELEASE=v0.1.0`. Override noninteraktif:
+Port SOCKS adalah `base + i`. Port HTTP adalah `base_http + i`; jika `base_http=0`, nilainya `base + 1000 + i`. Index `i` dihitung dari akun valid dan deduplikasi, bukan nomor baris `accounts.txt`.
 
-```bash
-VLESSBANK_WEBUI_PORT=9000 VLESSBANK_AUTH=user:pass \
-  curl -fsSL https://raw.githubusercontent.com/jhopan/Pan-VlessBank/master/install.sh | bash
-```
+Cloudflare Tunnel hanya transport. Exit IP ditentukan outbound Xray pada port tujuan. Setiap hostname harus menuju port Xray berbeda.
 
-Installer memasang binary Linux arm64 pada Termux. Taruh `xray` dan `cloudflared` pada folder instalasi atau `PATH`. Buka firewall OS/router sendiri bila perangkat LAN lain perlu akses.
+## Komponen
 
-## Pakai (CLI)
-
-```bash
-# mode lokal (default): hanya 127.0.0.1
-./vlessbank gen accounts.txt
-
-# mode direct: VPS / mesin dengan IP publik (wajib auth!)
-./vlessbank gen accounts.txt --listen 0.0.0.0 --auth user:pass
-
-# port HTTP manual
-./vlessbank gen accounts.txt --base-http 2081
-
-# mode tunnel: mesin tanpa IP publik, lewat Cloudflare Tunnel
-./vlessbank gen accounts.txt --tunnel socks.example.com --tunnel-id <UUID>
-cloudflared tunnel run
-```
-
-`gen` mencetak ringkasan (`N akun -> config.json (listen ..., SOCKS 1081+, HTTP 2081+)`) plus tabel
-`SOCKS :1081 | HTTP :2081 <- nama akun`. Flag lain: `-o/--out` (file keluaran), `--base`,
-`--insecure` (khusus xray < 26). Kalau `--tunnel` dipakai, `config.tunnel.yml` ditulis di sebelah
-file json keluaran. Lihat juga `./vlessbank help`.
-
-Cara bikin binary: bagian **Binary Go** di bawah.
-
-## Cek akun (penting untuk IP berbeda)
-
-```bash
-./vlessbank check                          # default accounts.txt, base 1081
-./vlessbank check accounts.txt --base 1320 --workers 6   # base lain = hindari bentrok dengan xray panel
-```
-
-Perintah ini start xray sendiri, lalu per akun membandingkan **IP keluar** dengan **IP di path WS**
-(`/<ip>-<port>`). Flag: `--base`, `--timeout` (default 12 detik), `--workers` (default 6), `--xray`
-(path binary xray). Status:
-
-| Status | Arti |
+| Komponen | Fungsi |
 |---|---|
-| `OK` | egress = IP di path, akun punya IP sendiri |
-| `MISMATCH` | worker menerima path tapi keluar lewat IP lain (mis. Cloudflare) -> path diabaikan, banyak akun jadi 1 IP |
-| `NOPATH` | path tidak berisi `ip-port`, IP tidak bisa diprediksi |
-| `FAIL` | akun tidak bisa dipakai |
+| `vlessbank` | Panel, generator config, checker IP, client tunnel CLI, dan utilitas unzip |
+| Xray | Membuka inbound SOCKS5/HTTP dan konek ke VLESS upstream |
+| cloudflared server | Connector Cloudflare Tunnel ke port Xray lokal |
+| Pan-VlessBank Client | Bridge client loopback ke hostname Tunnel untuk Camoufox |
+| `accounts.txt` | Link VLESS asli, satu link per baris |
+| `webui.settings.json` | Port, bind, auth proxy, tunnel, dan path Xray |
 
-Exit code 1 kalau ada `MISMATCH`/`FAIL`. Contoh nyata: worker `cfvpn-*` -> semua `MISMATCH` (egress `104.28.x`),
-worker `vpn-worker-prem-*` -> `OK` (egress = IP di path).
+## Install dan build
 
-## Pakai (Panel web, recommended)
-
-```bash
-./vlessbank                                    # panel di http://127.0.0.1:9000/ (folder kerja = folder binary)
-./vlessbank --port 9000 --listen 0.0.0.0 --dir /root/vlessbank   # STB: panel + proxy ke LAN
-```
-
-Flag `serve` (default): `--port`, `--listen`, `--xray` (nama/path binary xray), `--dir` (folder kerja,
-default folder binary). Binary `xray` dan `cloudflared` auto-scan di folder project (lalu PATH);
-path xray bisa diubah di Pengaturan (`xray_path`), cloudflared bisa diunduh dari menu Cloudflare.
-
-Buka `http://127.0.0.1:9000/` -> login `admin/admin` (ganti di Pengaturan).
-
-Menu: **Dashboard** (`/admin`, ringkasan: jumlah akun, status xray, tunnel, IP LAN, bind port) ·
-**Akun** (`/admin/akun`, daftar lengkap: URL SOCKS5 + HTTP per akun, LAN & publik, tombol copy,
-Test IP / Test Semua IP, tambah & hapus akun) · **Log** (`/admin/log`) · **Cloudflare** (`/admin/cf`) ·
-**Pengaturan** (`/admin/settings`).
-
-### Onlinekan WebUI dari local lab
-
-Untuk mesin tanpa IP publik: setelah login Cloudflare dan memilih domain, buka step **Onlinekan WebUI** di menu Cloudflare.
-
-1. Klik **Buat Tunnel WebUI**. Tunnel ini terpisah dari tunnel proxy akun.
-2. Klik **Generate Config WebUI**. File `webui.tunnel.yml` meneruskan `panel.<domain>` ke `http://127.0.0.1:<port-panel>`.
-3. Load dan pilih domain dengan API token, lalu klik **Buat DNS WebUI**. CNAME proxied `panel.<domain>` diarahkan ke tunnel WebUI.
-4. Klik **Start WebUI**. Panel tetap bind LAN (`0.0.0.0`) untuk perangkat lokal, sedangkan tunnel memakai loopback sehingga perubahan IP LAN tidak mengganggu hostname publik.
-
-Cloudflare Access opsional, tetapi login WebUI tetap wajib. Jangan membuka port panel di router, tunnel membuat koneksi keluar ke Cloudflare.
-
-
-### Menu Cloudflare (via web, no terminal)
-
-Alur lengkap:
-
-1. Binary cloudflared -- auto-scan / download otomatis
-2. Login CF -- klik tombol, link muncul, authorize di browser (fresh setiap kali)
-3. Buat / Pilih tunnel -- tunnel ID tersimpan otomatis
-4. Setup Domain -- paste CF API token -> Load Domain (list zone) -> pilih domain -> **Generate config.tunnel.yml** (credentials path auto) -> **Buat DNS Wildcard via API** (CNAME `*.socks.domain.com`)
-5. DNS wildcard summary
-6. Start/Stop tunnel + live log
-
-### Client
-
-| Mode | URI |
-|---|---|
-| Laptop sendiri | `socks5://127.0.0.1:1081` atau `http://127.0.0.1:2081` |
-| LAN device | `socks5://IP_LAPTOP:1081` atau `http://IP_LAPTOP:2081` |
-| Remote (tunnel) | lihat **"Tunnel: 1 akun = 1 port lokal"** di bawah |
-
-#### Tunnel: 1 akun = 1 port lokal (WAJIB)
-
-Tunnel cuma transport. IP keluar tetap ditentukan xray dari **port lokal mana** koneksi masuk
-(`127.0.0.1:1081` = akun 1, `127.0.0.1:1082` = akun 2, dst). Kalau semua hostname `socksN`
-diarahkan ke port lokal yang sama, mis. semuanya `cloudflared access ... --url 127.0.0.1:1081`,
-semua request masuk akun 1 dan **IP keluar jadi sama semua**. Satu hostname = satu port lokal beda.
-
-Pakai subcommand (spawn semua listener sekaligus, satu proses cloudflared per hostname):
+Installer mendukung Linux dan Windows Git Bash. Jalankan hanya di host yang akan menjalankan server.
 
 ```bash
-./vlessbank tunnel-client --domain example.com --accounts 18          # socks 7001+, http 8001+
-./vlessbank tunnel-client --domain example.com --accounts 18 --auth user:pass
-./vlessbank tunnel-client --domain example.com --accounts 3 --dry     # cek tabel + perintahnya dulu
-# hasil: socks5://127.0.0.1:7001 = akun 1, :7002 = akun 2, ...
+curl -fsSL https://raw.githubusercontent.com/jhopan/vless-bank/master/install.sh | bash
 ```
 
-Hostname yang dipakai: `socks1.example.com`, `http1.example.com`, `socks2.example.com`, dst.
-Flag lain: `--sub` (prefix subdomain, mis. `--sub socks` -> `socks1.socks.example.com`),
-`--socks-base` / `--http-base` (port lokal pertama, default 7001 / 8001), `--no-http` (hanya
-listener SOCKS), `--cloudflared` (path/command cloudflared). Ctrl+C mematikan semua listener.
-
-
-Atau manual, port lokal wajib beda per akun:
-
-```bash
-cloudflared access tcp --hostname socks1.socks.example.com --url 127.0.0.1:7001 &
-cloudflared access tcp --hostname socks2.socks.example.com --url 127.0.0.1:7002 &
-```
-
-Verifikasi tiap akun benar-benar beda IP (jalankan di client):
-
-```bash
-for p in 7001 7002 7003; do
-  curl -s --socks5-hostname 127.0.0.1:$p --max-time 15 "http://ip-api.com/json/?fields=query"; echo " <- $p"
-done
-```
-
-DNS wildcard: CNAME `*.<domain>` -> `<tunnel-id>.cfargotunnel.com`, Proxy **ON** (orange).
-Wajib ON -- record DNS-only membuat hostname tidak resolve (`no such host`) dan `cloudflared access` gagal.
-
-Hostname **1 level** saja: `socks1.domain.com`. Pola 2 level (`socks1.socks.domain.com`) cuma jalan
-kalau `socks.domain.com` didaftarkan sebagai zone sendiri; cert Universal SSL free plan hanya cover
-`*.domain.com` (satu level), jadi 2 level -> `tls: handshake failure`.
-
-## Binary Go (satu binary, tanpa Python)
+Build manual:
 
 ```bash
 cd go
-go build -o vlessbank.exe ./cmd/vlessbank                       # Windows
-GOOS=linux GOARCH=arm64 go build -o vlessbank ./cmd/vlessbank   # STB Armbian
-
-./vlessbank.exe                                                   # serve: panel di :9000 (folder kerja = folder binary)
-./vlessbank.exe --port 9000 --listen 0.0.0.0 --dir /root/vlessbank
-./vlessbank.exe gen accounts.txt --base 1081                      # config.json (+ tunnel yml)
-./vlessbank.exe check accounts.txt --base 1320                    # uji IP tiap akun (lihat bagian "Cek akun")
-./vlessbank.exe tunnel-client --domain example.com --accounts 3   # client publik
-./vlessbank.exe unzip file.zip folder                             # ekstrak zip (dipakai install.sh kalau unzip tidak ada)
-./vlessbank.exe help
+go build -o vlessbank.exe ./cmd/vlessbank
+GOOS=linux GOARCH=amd64 go build -o vlessbank ./cmd/vlessbank
+GOOS=linux GOARCH=arm64 go build -o vlessbank ./cmd/vlessbank
 ```
 
-Uji: `cd go && go vet ./... && go test ./... -count=1` (test hermetic, tanpa network dan tanpa akun
-vless asli). Butuh `xray` + `cloudflared` tetap seperti biasa (folder yang sama, atau `xray_path` di
-Pengaturan). `install.sh` membangun binary ini kalau belum ada, mengunduh kedua binary, lalu
-menjalankan `./vlessbank --port ... --listen ... --dir ...`.
+Server memerlukan binary Xray. Tunnel memerlukan `cloudflared`. Panel mencari binary di working directory, lalu `PATH`; `xray_path` dapat diatur dari Pengaturan.
 
-## API client read-only
-
-`/api/proxies` tetap API admin, memakai Basic auth panel atau cookie sesi dan dapat menampilkan data LAN. Jangan masukkan kredensial admin ke client.
-
-Buat token client terbatas dari API admin. Nilai `token` hanya muncul sekali; server hanya menyimpan hash token di `webui.client-tokens.json` permission `0600`.
+## Menjalankan panel
 
 ```bash
-curl -u admin:password -X POST https://panel.example.com/api/client-tokens \
-  -d 'label=camoufox-laptop&hours=720'
-curl -H 'Authorization: Bearer TOKEN_CLIENT' \
-  https://panel.example.com/api/client/proxies
-curl -u admin:password https://panel.example.com/api/client-tokens
-curl -u admin:password -X POST https://panel.example.com/api/client-tokens/revoke \
+# Default: panel http://127.0.0.1:9000
+./vlessbank
+
+# Host Linux dengan state di folder khusus
+./vlessbank --port 9000 --listen 0.0.0.0 --dir /opt/pan-vlessbank
+```
+
+Panel publik status ada di `/`. Halaman `/admin` dan `/api/*` memerlukan login panel, lewat HTTP Basic atau cookie sesi `vb_session`.
+
+> [!WARNING]
+> Bind proxy ke `0.0.0.0` hanya boleh dengan `auth` proxy kuat. Jangan forward port proxy ke internet bila Tunnel adalah jalur remote yang dipilih.
+
+## CLI
+
+```bash
+# Tulis config dari akun
+./vlessbank gen accounts.txt
+./vlessbank gen accounts.txt --base 1081 --base-http 2081
+./vlessbank gen accounts.txt --listen 0.0.0.0 --auth USER_PROXY:PASSWORD_PROXY
+
+# Cek egress setiap akun
+./vlessbank check accounts.txt --base 1320 --workers 6
+
+# Fan-out client manual, tanpa UI client
+./vlessbank tunnel-client --domain example.com --accounts 3 --auth USER_PROXY:PASSWORD_PROXY
+
+./vlessbank help
+```
+
+`gen` menolak `--listen 0.0.0.0` tanpa `--auth`. `check` exit `1` bila ada akun `MISMATCH` atau `FAIL`.
+
+## Setup Cloudflare Tunnel
+
+Di menu **Cloudflare** panel:
+
+1. Pastikan `cloudflared` tersedia, download bila perlu.
+2. Login Cloudflare, buat atau pilih proxy tunnel.
+3. Pilih domain dan generate `config.tunnel.yml`.
+4. Buat DNS wildcard proxied untuk domain Tunnel.
+5. Start proxy tunnel.
+6. Buka diagnostics Tunnel. Pastikan connector, service, dan ingress valid.
+
+Contoh ingress dua akun:
+
+```yaml
+ingress:
+  - hostname: socks1.example.com
+    service: tcp://localhost:1081
+  - hostname: http1.example.com
+    service: tcp://localhost:2081
+  - hostname: socks2.example.com
+    service: tcp://localhost:1082
+  - hostname: http2.example.com
+    service: tcp://localhost:2082
+```
+
+Aturan wajib:
+
+- DNS Tunnel harus proxied melalui Cloudflare.
+- Gunakan hostname satu level seperti `socks1.example.com`.
+- `socksN` dan `httpN` tidak boleh menunjuk port lokal sama.
+- `/api/regen` menulis config baru, tetapi tidak restart Xray. Restart Xray setelah regenerate bila config yang sedang berjalan harus memakai perubahan.
+- Tunnel credentials pada `config.tunnel.yml` tidak boleh ditimpa placeholder saat regenerate.
+
+## Client remote melalui Cloudflare Tunnel
+
+Hostname Tunnel bukan endpoint SOCKS atau HTTP langsung untuk browser. User remote perlu bridge lokal dengan `cloudflared access tcp`.
+
+```text
+Camoufox atau aplikasi proxy
+  → listener lokal client
+  → cloudflared access tcp
+  → socks1.example.com atau http1.example.com
+  → Cloudflare Tunnel
+  → Xray port akun
+```
+
+Dua pilihan:
+
+| Cara | Untuk siapa | Keterangan |
+|---|---|---|
+| Pan-VlessBank Client | User desktop | UI lokal mengimpor hostname dari token scope dan mengelola listener |
+| `vlessbank tunnel-client` | Operator CLI | Membuka listener manual/fan-out tanpa UI client |
+
+### Camoufox dan autentikasi proxy
+
+Camoufox/Firefox tidak mendukung autentikasi SOCKS5 username/password. Pan-VlessBank Client menangani batas ini dengan relay lokal: client menyimpan **Auth Proxy** pada config lokal permission `0600`, lalu menyuntikkan auth hanya antara relay loopback dan bridge cloudflared.
+
+Camoufox memakai SOCKS tanpa credential:
+
+```python
+proxy = {
+    "server": "socks5://127.0.0.1:7001",
+}
+```
+
+Untuk aplikasi lain yang mendukung SOCKS5 auth, credential dapat dikirim langsung. HTTP bridge tetap tersedia bila aplikasi memerlukannya.
+> [!IMPORTANT]
+> Client versi relay memerlukan **Auth Proxy** yang sama dengan auth Xray. Client lama tanpa field ini masih dapat membuka bridge HTTP, tetapi tidak dapat membuat SOCKS Camoufox tanpa auth.
+
+Lihat README repository **Pan-VlessBank Client** untuk setup relay dan port internal.
+
+## Token client read-only
+
+Jangan memberi Basic auth admin panel ke client. Buat token client dari panel atau API admin:
+
+```bash
+curl -u ADMIN:PASSWORD -X POST https://panel.example.com/api/client-tokens \
+  -d 'label=camoufox-laptop&hours=720&accounts=1,2'
+```
+
+- `accounts=1,2` membatasi token ke akun 1 dan 2.
+- Scope kosong berarti semua akun.
+- Nilai token hanya muncul sekali. Server hanya menyimpan hash token.
+- Cabut token perangkat hilang atau tidak dipakai.
+
+```bash
+curl -u ADMIN:PASSWORD -X POST https://panel.example.com/api/client-tokens/revoke \
   -d 'id=TOKEN_ID'
 ```
 
-`/api/client/proxies` hanya mengembalikan `idx`, `name`, `socks_host`, dan `http_host`. Tidak mengirim link VLESS, upstream, IP LAN, port Xray, auth proxy, credential tunnel, atau token Cloudflare.
+Token client hanya boleh membaca endpoint berikut:
 
-Endpoint admin operasi:
+| Endpoint | Isi |
+|---|---|
+| `GET /api/client/proxies` | `idx`, nama, hostname SOCKS publik, hostname HTTP publik sesuai scope |
+| `GET /api/cf/tunnel-diagnostics` | connector, service Tunnel, ingress, dan validasi Tunnel |
 
-```text
-GET /api/health  status Xray, tunnel proxy, tunnel WebUI, config, dan validasi ingress
-GET /api/audit   100 event operasi terakhir, tanpa secret
-GET /api/backup  ZIP redacted: jumlah akun dan setting non-secret saja
+Token tidak dapat membaca VLESS URI, upstream, IP LAN, port Xray, credential proxy, token Cloudflare, daftar token, atau operasi admin.
+
+## Verifikasi
+
+### Verifikasi server lokal
+
+```bash
+# Setelah Xray berjalan, pakai credential proxy aktif
+curl -sS --proxy-user USER_PROXY:PASSWORD_PROXY \
+  --socks5-hostname 127.0.0.1:1081 \
+  --max-time 25 'http://ip-api.com/json/?fields=query,countryCode'
 ```
 
-Validasi ingress menolak hostname yang berbagi port lokal. Setiap `socksN` dan `httpN` harus menuju port Xray berbeda. Backup sengaja tidak berisi `accounts.txt`, VLESS URI, login, auth proxy, token client, log, atau credential tunnel.
+### Verifikasi remote melalui client bridge
 
-### Operasi persistent
+Setelah client membuka listener akun 2 pada `:7102`:
 
-Klik **Start Xray** menyimpan intent ke `webui.runtime.json`. Setelah panel atau host restart, Xray otomatis start lagi hanya jika intent aktif dan `config.json` ada. Klik **Stop Xray** menghapus intent ini.
-
-Di Linux, proxy tunnel dimiliki `pan-vlessbank-proxy-tunnel.service`, bukan child panel. Panel hanya start, stop, atau restart service tersebut. Tunnel tetap hidup saat `pan-vlessbank.service` restart dan kembali aktif saat boot.
-
-Token client dapat scope akun. Isi `1,3` saat membuat token untuk hanya memberi hostname akun 1 dan 3. Scope kosong berarti semua akun, dipakai demi kompatibilitas token lama.
-`format=text` keluarannya siap tempel:
-
-```
-socks5://vb:25i3FZ9JCuSM@192.168.42.124:1081#1
-http://vb:25i3FZ9JCuSM@192.168.42.124:2081#1
+```bash
+curl -sS --proxy-user USER_PROXY:PASSWORD_PROXY \
+  --socks5-hostname 127.0.0.1:7102 \
+  --max-time 25 'http://ip-api.com/json/?fields=query,countryCode'
 ```
 
-Bentuk JSON: `{host, auth, listen, tunnel, count, proxies:[{idx, name, upstream, type,
-socks:{host,port,url}, http:{host,port,url}, public:{socks,http,access_socks,access_http}}]}`.
-`public` hanya muncul kalau tunnel diatur; `only=socks|http` menghapus sisi yang tidak dipakai.
+Output harus memuat IP dan kode negara. Bandingkan setiap port bila akun harus memiliki exit IP berbeda.
 
-Endpoint lain: `/api/status`, `/api/accounts`, `/api/ip?port=`, `/api/ipall`, `/api/add`,
-`/api/delete`, `/api/xray`, `/api/regen`, `/api/cf/*`. Halaman `/` (status) sengaja publik, sisanya
-butuh login.
+### Development checks
 
-## Catatan
-
-- `accounts.txt` berisi UUID = kredensial. Gitignored -- jangan pernah push.
-- **IP keluar per port ditentukan endpoint upstream di akun**, yaitu `address:port` di `config.json`
-  (`settings.vnext[0]`). Seratus akun yang semuanya ke Worker/host yang sama = 1 IP, walaupun port,
-  UUID, dan path-nya beda. Tunnel CF tidak mengubah ini -- tunnel cuma transport.
-  Cek cepat: jalankan `./vlessbank gen`, `gen` mencetak `WARN` kalau endpoint upstream unik < jumlah akun.
-- **Tambah akun**: link divalidasi minimal (skema `vless`, ada uuid, ada host, port wajar). Link
-  rusak seperti `vless://abc` dihitung `dilewati` dan **tidak** ditulis ke `accounts.txt`, jadi tidak
-  bisa lagi bikin xray gagal start. Hasilnya muncul di pesan halaman Akun:
-  `N akun ditambah, D duplikat dibuang, M dilewati (bukan vless)`.
-- Mode direct (0.0.0.0) WAJIB `--auth`. Proxy terbuka tanpa auth = open proxy, IP cepat ke-flag.
-  `./vlessbank gen` menolak `--listen 0.0.0.0` tanpa `--auth`.
-- **Bind LAN**: set `listen` = `0.0.0.0` di Pengaturan (tetap wajib `auth user:pass`). Client LAN pakai
-  `socks5://user:pass@IP_STB:1081` atau `http://user:pass@IP_STB:2081`. Panelnya sendiri:
-  `./vlessbank --listen 0.0.0.0`.
-- **Regenerate config tidak lagi merusak tunnel**: `config.tunnel.yml` memakai path kredensial asli
-  (`~/.cloudflared/<tunnel-id>.json`) atau mempertahankan path yang sudah tertulis di yml; dulu regen
-  menimpanya dengan placeholder `<PATH>/<TUNNEL-UUID>.json` sampai tunnel gagal start ("doesn't exist
-  or is not a file"). Placeholder cuma dipakai kalau kredensial belum ada sama sekali.
-- xray dan cloudflared adalah proses anak panel: mematikan panel ikut mematikan keduanya, jadi start
-  ulang xray/tunnel setelah panel di-restart.
-- **Login panel**: sekali masuk, sesi disimpan cookie `vb_session` (HttpOnly, 30 hari, file
-  `webui.sessions`) -- buka panel lagi langsung dashboard, tidak usah login ulang. Basic auth tetap
-  didukung untuk script/bot. `/logout` menghapus sesi + cookie.
-- **xray satu instance**: klik Start berkali-kali tidak menumpuk proses; kalau xray masih hidup
-  (termasuk sisa panel yang di-restart) Start menolak dan menyebut PID-nya, dan Stop mematikan
-  semua proses xray yang ketemu.
-- **`--insecure` hanya untuk xray < 26.** Xray 26 menghapus `allowInsecure` (ganti
-  `pinnedPeerCertSha256`); `gen` mendeteksi versi binary (`xray version`) dan otomatis melewati opsi
-  itu, karena config yang masih memuatnya gagal di-load (`exit 23`).
-- HTTPS client traffic pakai CONNECT -- HTTP inbound xray juga tunneling TLS-nya, sama bagus SOCKS.
-- Xray: binary ~35MB, RAM ~30-60MB stabil walau banyak akun (18 akun da ketahua).
-- cloudflared: 1 proses, RAM ~40-80MB, unmetered bandwidth, 1000 tunnel/akun limit free plan.
-- xray diunduh `install.sh` (atau taruh `xray`/`xray.exe` di folder kerja, path bisa diatur di
-  Pengaturan); cloudflared bisa diunduh otomatis dari menu Cloudflare.
-- Tampilan panel (dark, lebar penuh) mengikuti token di `DESIGN.md`.
-
-## Struktur
-
-```
-go/                     IMPLEMENTASI UTAMA -- satu binary Go, stdlib only (module vlessbank)
-  cmd/vlessbank         serve (panel) | gen (config) | check (uji IP akun) | tunnel-client | unzip
-  internal/...          config, settings, xray, netcheck, cf, web, diag, tunclient
-  go.mod                module vlessbank (Go 1.26)
-install.sh              installer satu-shot (build binary Go, unduh xray + cloudflared, tulis settings, start panel)
-accounts.txt            akun asli (gitignored)
-accounts.example.txt    contoh format
-config.json             output xray (gitignored)
-config.tunnel.yml       output cloudflared (gitignored)
-webui.login             login hash panel (gitignored)
-webui.sessions          token sesi login (gitignored, 30 hari)
-webui.settings.json     settings panel (gitignored)
-xray.exe / cloudflared.exe  binary lokal (gitignored)
+```bash
+cd go
+gofmt -w ./cmd ./internal
+go test ./... -count=1
+go vet ./...
+go build ./...
 ```
 
-`webui.py`, `gen.py`, dan `cf.py` (versi Python) sudah dihapus dari repo ini; kalau masih perlu,
-riwayatnya ada di git.
+Test hermetic. Tidak membutuhkan jaringan atau akun VLESS nyata.
+
+## Troubleshooting
+
+| Gejala | Penyebab umum | Perbaikan |
+|---|---|---|
+| Semua akun memiliki exit IP sama | Hostname Tunnel menuju port Xray sama, atau upstream VLESS memang exit sama | Periksa ingress per hostname dan `vlessbank check` |
+| `websocket: bad handshake` pada client | Xray mati atau connector gagal mencapai origin | Cek status Xray dahulu, lalu service proxy tunnel |
+| Client diagnostics gagal | Token dicabut, service Tunnel mati, connector nol, atau ingress invalid | Buat token baru bila perlu, cek diagnostics panel |
+| `No authentication method was acceptable` | Credential proxy belum diberikan ke aplikasi | Masukkan `USER_PROXY:PASSWORD_PROXY` pada konfigurasi SOCKS/HTTP Camoufox |
+| `User was rejected by SOCKS5 server` | Credential proxy salah | Gunakan credential auth aktif di Pengaturan dan regenerate/restart Xray bila baru diubah |
+| `no such host` atau TLS handshake gagal | DNS tidak proxied atau hostname lebih dari satu level | Gunakan CNAME proxied dan `socksN.domain.tld` |
+| Listener lokal sudah dipakai | Sisa proses `cloudflared access tcp` | Stop client secara normal, lalu hentikan hanya proses listener yang memakai port tersebut |
+
+## File state
+
+| File | Isi | Rahasia |
+|---|---|---:|
+| `accounts.txt` | Link VLESS | Ya |
+| `config.json` | Config Xray dan auth proxy | Ya |
+| `config.tunnel.yml` | Config Tunnel dan path credential | Ya |
+| `webui.settings.json` | Pengaturan panel dan proxy | Ya |
+| `webui.login` | Hash login panel | Ya |
+| `webui.sessions` | Sesi panel | Ya |
+| `webui.client-tokens.json` | Hash dan metadata token client | Ya |
+| `xray.log`, `cloudflared.log` | Log proses | Bisa berisi data sensitif |
+
+Semua state berada di `--dir`, defaultnya folder binary.

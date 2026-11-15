@@ -58,6 +58,10 @@ func (s *Server) doGet(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, map[string]any{"proxies": s.clientProxyList(scope)}, http.StatusOK)
 		return
 	}
+	if path == "/api/cf/tunnel-diagnostics" && s.clientTokenOK(r) {
+		s.writeTunnelDiagnostics(w)
+		return
+	}
 	authed := s.authOK(r)
 	if (path == "/" || path == "/login") && authed {
 		redirect(w, "/admin")
@@ -79,22 +83,7 @@ func (s *Server) doGet(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	switch path {
 	case "/api/cf/tunnel-diagnostics":
-		set := s.set()
-		validation := ops.ReadTunnelValidation(s.tunPath())
-		raw, _ := os.ReadFile(s.tunPath())
-		serviceActive := false
-		if svc := s.proxyTunnelService(); svc != nil {
-			serviceActive = svc.Active()
-		}
-		writeJSON(w, map[string]any{
-			"tunnel_id":      set.TunnelID,
-			"domain":         set.Tunnel,
-			"connectors":     cf.TunnelConnections(set.TunnelID),
-			"service_active": serviceActive,
-			"ingress":        ops.TunnelIngress(raw),
-			"validation":     validation,
-			"access":         "opsional, tunnel tidak memaksa Cloudflare Access",
-		}, http.StatusOK)
+		s.writeTunnelDiagnostics(w)
 		return
 	case "/api/health":
 		writeJSON(w, s.healthSnapshot(), http.StatusOK)
@@ -217,6 +206,25 @@ func (s *Server) doGet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeHTML(w, s.statusPage(), http.StatusOK)
+}
+
+func (s *Server) writeTunnelDiagnostics(w http.ResponseWriter) {
+	set := s.set()
+	validation := ops.ReadTunnelValidation(s.tunPath())
+	raw, _ := os.ReadFile(s.tunPath())
+	serviceActive := false
+	if svc := s.proxyTunnelService(); svc != nil {
+		serviceActive = svc.Active()
+	}
+	writeJSON(w, map[string]any{
+		"tunnel_id":      set.TunnelID,
+		"domain":         set.Tunnel,
+		"connectors":     cf.TunnelConnections(set.TunnelID),
+		"service_active": serviceActive,
+		"ingress":        ops.TunnelIngress(raw),
+		"validation":     validation,
+		"access":         "opsional, tunnel tidak memaksa Cloudflare Access",
+	}, http.StatusOK)
 }
 
 func (s *Server) doPost(w http.ResponseWriter, r *http.Request) {
