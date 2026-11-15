@@ -1,98 +1,45 @@
 #!/usr/bin/env bash
-# Pan-VlessBank release installer. Linux, macOS, Termux, and Git Bash Windows.
 set -euo pipefail
 
-REPO="${VLESSBANK_REPO:-jhopan/Pan-VlessBank}"
+REPO="${VLESSBANK_REPO:-jhopan/vless-bank}"
 RELEASE="${VLESSBANK_RELEASE:-latest}"
 APP_DIR="${VLESSBANK_DIR:-$HOME/pan-vlessbank}"
-WEBUI_PORT="${VLESSBANK_WEBUI_PORT:-}"
-BASE_PORT="${VLESSBANK_BASE_PORT:-1081}"
-BASE_HTTP="${VLESSBANK_BASE_HTTP:-0}"
-LISTEN="${VLESSBANK_LISTEN:-0.0.0.0}"
-AUTH="${VLESSBANK_AUTH:-}"
-START="${VLESSBANK_START:-1}"
+START="${VLESSBANK_START:-0}"
 
 say() { printf '%s\n' "$*"; }
-die() { printf 'ERROR: %s\n' "$*" >&2; return 1; }
+die() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 
-release_asset_for() {
-  local os=$1 arch=$2 family=
-  if [ "$os" = Termux ]; then family=linux
-  else
-    case "$os" in
-      Linux) family=linux ;;
-      Darwin) family=darwin ;;
-      MINGW*|MSYS*|CYGWIN*) family=windows ;;
-      *) die "OS '$os' tidak didukung"; return 1 ;;
-    esac
-  fi
-  case "$arch" in
-    x86_64|amd64) arch=amd64 ;;
-    aarch64|arm64) arch=arm64 ;;
-    *) die "arsitektur '$arch' tidak didukung"; return 1 ;;
-  esac
-  case "$family/$arch" in
-    linux/amd64|linux/arm64|darwin/amd64|darwin/arm64) printf 'pan-vlessbank_%s_%s\n' "$family" "$arch" ;;
-    windows/amd64) printf 'pan-vlessbank_windows_amd64.exe\n' ;;
-    *) die "$family/$arch belum tersedia"; return 1 ;;
+platform() {
+  case "$(uname -s)/$(uname -m)" in
+    Linux/x86_64|Linux/amd64) printf 'linux_amd64' ;;
+    Linux/aarch64|Linux/arm64) printf 'linux_arm64' ;;
+    Darwin/x86_64|Darwin/amd64) printf 'darwin_amd64' ;;
+    Darwin/arm64) printf 'darwin_arm64' ;;
+    *) die "platform tidak didukung: $(uname -s) $(uname -m)" ;;
   esac
 }
 
-if [ "${VLESSBANK_LIB_ONLY:-0}" = 1 ]; then return 0; fi
+command -v curl >/dev/null || die 'curl belum terpasang'
+ASSET="vlessbank_$(platform)"
+BASE_URL="https://github.com/$REPO/releases/download/$RELEASE"
+TMP_DIR=$(mktemp -d)
+trap 'rm -rf "$TMP_DIR"' EXIT
 
-command -v curl >/dev/null || { die 'curl belum terpasang'; exit 1; }
-OS=$(uname -s)
-[ "${PREFIX:-}" != "" ] && case "$PREFIX" in /data/data/com.termux/*) OS=Termux ;; esac
-ASSET=$(release_asset_for "$OS" "$(uname -m)") || exit 1
-case "$ASSET" in *.exe) BIN_NAME=pan-vlessbank.exe ;; *) BIN_NAME=pan-vlessbank ;; esac
-
-if [ -z "$WEBUI_PORT" ]; then
-  if [ -t 0 ]; then read -r -p 'Port panel [9000]: ' WEBUI_PORT; fi
-  WEBUI_PORT=${WEBUI_PORT:-9000}
-fi
-case "$WEBUI_PORT" in ''|*[!0-9]*) die 'port harus angka 1 sampai 65535'; exit 1 ;; esac
-[ "$WEBUI_PORT" -ge 1 ] && [ "$WEBUI_PORT" -le 65535 ] || { die 'port harus 1 sampai 65535'; exit 1; }
-
-if [ "$LISTEN" = 0.0.0.0 ] && [ -z "$AUTH" ]; then
-  if [ -t 0 ]; then read -r -p 'Auth proxy user:pass (wajib untuk bind LAN): ' AUTH; fi
-  [ -n "$AUTH" ] || { die 'bind LAN 0.0.0.0 perlu VLESSBANK_AUTH=user:pass'; exit 1; }
-fi
+curl -fsSL --retry 3 -o "$TMP_DIR/$ASSET" "$BASE_URL/$ASSET" || die "download gagal: $BASE_URL/$ASSET"
+curl -fsSL --retry 3 -o "$TMP_DIR/checksums.txt" "$BASE_URL/checksums.txt" || die 'download checksums gagal'
+EXPECTED=$(awk -v asset="$ASSET" '$2==asset {print $1}' "$TMP_DIR/checksums.txt")
+[ -n "$EXPECTED" ] || die "checksum $ASSET tidak ditemukan"
+if command -v sha256sum >/dev/null; then ACTUAL=$(sha256sum "$TMP_DIR/$ASSET" | awk '{print $1}'); else ACTUAL=$(shasum -a 256 "$TMP_DIR/$ASSET" | awk '{print $1}'); fi
+[ "$EXPECTED" = "$ACTUAL" ] || die 'checksum binary tidak cocok'
 
 mkdir -p "$APP_DIR"
-cd "$APP_DIR"
-BASE_URL="https://github.com/$REPO/releases/download/$RELEASE"
-curl -fsSL --retry 3 -o "$BIN_NAME" "$BASE_URL/$ASSET" || { rm -f "$BIN_NAME"; die "download gagal: $BASE_URL/$ASSET"; exit 1; }
-curl -fsSL --retry 3 -o checksums.txt "$BASE_URL/checksums.txt" || { rm -f "$BIN_NAME"; die 'download checksums gagal'; exit 1; }
-if command -v sha256sum >/dev/null; then
-  grep "  $ASSET$" checksums.txt | sha256sum -c -
-elif command -v shasum >/dev/null; then
-  expected=$(awk -v n="$ASSET" '$2==n {print $1}' checksums.txt)
-  [ -n "$expected" ] && [ "$expected" = "$(shasum -a 256 "$BIN_NAME" | awk '{print $1}')" ]
-else
-  die 'butuh sha256sum atau shasum untuk verifikasi release'; exit 1
-fi || { rm -f "$BIN_NAME"; die 'checksum binary tidak cocok'; exit 1; }
-chmod +x "$BIN_NAME" 2>/dev/null || true
-
-cat > webui.settings.json <<EOF
-{
-  "xray": "",
-  "base": $BASE_PORT,
-  "base_http": $BASE_HTTP,
-  "listen": "$LISTEN",
-  "auth": "$AUTH",
-  "tunnel": "",
-  "tunnel_id": "",
-  "xray_path": "xray",
-  "insecure": true
-}
-EOF
-
-say "Binary verified: $BIN_NAME"
-say "Panel bind: http://$LISTEN:$WEBUI_PORT/"
-say 'Proxy bind: 0.0.0.0 with auth required.'
-say 'Install xray and cloudflared in this folder or make both available on PATH.'
+install -m 0755 "$TMP_DIR/$ASSET" "$APP_DIR/vlessbank"
+say "Installed: $APP_DIR/vlessbank"
+say "Release: $RELEASE"
+say 'State lama dipertahankan: accounts.txt, config.json, settings, token, dan log tidak diubah.'
+say "Jalankan: cd $APP_DIR && ./vlessbank"
 if [ "$START" = 1 ]; then
-  nohup "./$BIN_NAME" --port "$WEBUI_PORT" --listen "$LISTEN" --dir "$APP_DIR" > webui.log 2>&1 &
-  echo $! > webui.pid
-  say "Panel started, pid $(cat webui.pid)."
+  cd "$APP_DIR"
+  nohup ./vlessbank > webui.log 2>&1 &
+  say "Panel started: http://127.0.0.1:9000"
 fi

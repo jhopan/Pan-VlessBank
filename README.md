@@ -42,24 +42,38 @@ Cloudflare Tunnel hanya transport. Exit IP ditentukan outbound Xray pada port tu
 | `accounts.txt` | Link VLESS asli, satu link per baris |
 | `webui.settings.json` | Port, bind, auth proxy, tunnel, dan path Xray |
 
-## Install dan build
+## Install dan update
 
-Installer mendukung Linux dan Windows Git Bash. Jalankan hanya di host yang akan menjalankan server.
+Release punya dua channel:
+
+| Channel | Fungsi |
+|---|---|
+| `latest` | Build rolling terbaru, default installer |
+| `vX.Y.Z` | Release tetap untuk install atau rollback |
+
+Installer mengunduh binary sesuai OS/arsitektur, memverifikasi SHA-256 sebelum replace, lalu mempertahankan `accounts.txt`, config, settings, token, dan log.
+
+### Linux dan macOS
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/jhopan/vless-bank/master/install.sh | bash
 ```
 
-Build manual:
+### Windows
 
-```bash
-cd go
-go build -o vlessbank.exe ./cmd/vlessbank
-GOOS=linux GOARCH=amd64 go build -o vlessbank ./cmd/vlessbank
-GOOS=linux GOARCH=arm64 go build -o vlessbank ./cmd/vlessbank
+```bat
+curl.exe -fsSL -o install.bat https://raw.githubusercontent.com/jhopan/vless-bank/master/install.bat
+install.bat
 ```
 
-Server memerlukan binary Xray. Tunnel memerlukan `cloudflared`. Panel mencari binary di working directory, lalu `PATH`; `xray_path` dapat diatur dari Pengaturan.
+Pin versi atau ubah folder install:
+
+```bash
+VLESSBANK_RELEASE=v0.5.0 VLESSBANK_DIR=$HOME/pan-vlessbank \
+  curl -fsSL https://raw.githubusercontent.com/jhopan/vless-bank/master/install.sh | bash
+```
+
+Windows memakai environment variable yang sama sebelum menjalankan `install.bat`. Installer tidak memasang Xray atau cloudflared otomatis; sediakan kedua binary di folder server atau `PATH`.
 
 ## Menjalankan panel
 
