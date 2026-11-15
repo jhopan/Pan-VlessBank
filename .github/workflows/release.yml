@@ -14,11 +14,11 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { goos: linux, goarch: amd64, asset: vlessbank_linux_amd64 }
-          - { goos: linux, goarch: arm64, asset: vlessbank_linux_arm64 }
-          - { goos: darwin, goarch: amd64, asset: vlessbank_darwin_amd64 }
-          - { goos: darwin, goarch: arm64, asset: vlessbank_darwin_arm64 }
-          - { goos: windows, goarch: amd64, asset: vlessbank_windows_amd64.exe }
+          - { goos: linux, goarch: amd64, asset: pan-vlessbank_linux_amd64 }
+          - { goos: linux, goarch: arm64, asset: pan-vlessbank_linux_arm64 }
+          - { goos: darwin, goarch: amd64, asset: pan-vlessbank_darwin_amd64 }
+          - { goos: darwin, goarch: arm64, asset: pan-vlessbank_darwin_arm64 }
+          - { goos: windows, goarch: amd64, asset: pan-vlessbank_windows_amd64.exe }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -46,7 +46,7 @@ jobs:
           merge-multiple: true
       - name: Write checksums
         working-directory: dist
-        run: sha256sum vlessbank_* > checksums.txt
+        run: sha256sum pan-vlessbank_* > checksums.txt
       - name: Publish versioned and latest releases
         env:
           GH_TOKEN: ${{ github.token }}

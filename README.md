@@ -56,21 +56,21 @@ Installer mengunduh binary sesuai OS/arsitektur, memverifikasi SHA-256 sebelum r
 ### Linux dan macOS
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jhopan/vless-bank/master/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/jhopan/Pan-VlessBank/master/install.sh | bash
 ```
 
 ### Windows
 
 ```bat
-curl.exe -fsSL -o install.bat https://raw.githubusercontent.com/jhopan/vless-bank/master/install.bat
+curl.exe -fsSL -o install.bat https://raw.githubusercontent.com/jhopan/Pan-VlessBank/master/install.bat
 install.bat
 ```
 
 Pin versi atau ubah folder install:
 
 ```bash
-VLESSBANK_RELEASE=v0.5.0 VLESSBANK_DIR=$HOME/pan-vlessbank \
-  curl -fsSL https://raw.githubusercontent.com/jhopan/vless-bank/master/install.sh | bash
+PAN_VLESSBANK_RELEASE=v0.6.0 PAN_VLESSBANK_DIR=$HOME/pan-vlessbank \
+  curl -fsSL https://raw.githubusercontent.com/jhopan/Pan-VlessBank/master/install.sh | bash
 ```
 
 Windows memakai environment variable yang sama sebelum menjalankan `install.bat`. Installer tidak memasang Xray atau cloudflared otomatis; sediakan kedua binary di folder server atau `PATH`.
@@ -79,10 +79,10 @@ Windows memakai environment variable yang sama sebelum menjalankan `install.bat`
 
 ```bash
 # Default: panel http://127.0.0.1:9000
-./vlessbank
+./pan-vlessbank
 
 # Host Linux dengan state di folder khusus
-./vlessbank --port 9000 --listen 0.0.0.0 --dir /opt/pan-vlessbank
+./pan-vlessbank --port 9000 --listen 0.0.0.0 --dir /opt/pan-vlessbank
 ```
 
 Panel publik status ada di `/`. Halaman `/admin` dan `/api/*` memerlukan login panel, lewat HTTP Basic atau cookie sesi `vb_session`.
@@ -94,17 +94,17 @@ Panel publik status ada di `/`. Halaman `/admin` dan `/api/*` memerlukan login p
 
 ```bash
 # Tulis config dari akun
-./vlessbank gen accounts.txt
-./vlessbank gen accounts.txt --base 1081 --base-http 2081
-./vlessbank gen accounts.txt --listen 0.0.0.0 --auth USER_PROXY:PASSWORD_PROXY
+./pan-vlessbank gen accounts.txt
+./pan-vlessbank gen accounts.txt --base 1081 --base-http 2081
+./pan-vlessbank gen accounts.txt --listen 0.0.0.0 --auth USER_PROXY:PASSWORD_PROXY
 
 # Cek egress setiap akun
-./vlessbank check accounts.txt --base 1320 --workers 6
+./pan-vlessbank check accounts.txt --base 1320 --workers 6
 
 # Fan-out client manual, tanpa UI client
-./vlessbank tunnel-client --domain example.com --accounts 3 --auth USER_PROXY:PASSWORD_PROXY
+./pan-vlessbank tunnel-client --domain example.com --accounts 3 --auth USER_PROXY:PASSWORD_PROXY
 
-./vlessbank help
+./pan-vlessbank help
 ```
 
 `gen` menolak `--listen 0.0.0.0` tanpa `--auth`. `check` exit `1` bila ada akun `MISMATCH` atau `FAIL`.

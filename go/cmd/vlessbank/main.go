@@ -419,13 +419,13 @@ func main() {
 }
 
 func usage() {
-	fmt.Print(`vlessbank - panel + generator vless (satu binary, stdlib only)
+	fmt.Print(`pan-vlessbank - panel + generator VLESS (satu binary, stdlib only)
 
-  vlessbank [serve] [--port 9000] [--listen 127.0.0.1] [--xray xray] [--dir FOLDER]
-  vlessbank gen [accounts.txt] [-o config.json] [--base 1081] [--base-http 0]
-                 [--listen 127.0.0.1] [--auth user:pass] [--tunnel DOMAIN] [--tunnel-id UUID] [--insecure]
-  vlessbank check [accounts.txt] [--base 1081] [--timeout 12] [--workers 6]
-  vlessbank tunnel-client --domain example.com --accounts 3 [--sub socks] [--dry]
+  pan-vlessbank [serve] [--port 9000] [--listen 127.0.0.1] [--xray xray] [--dir FOLDER]
+  pan-vlessbank gen [accounts.txt] [-o config.json] [--base 1081] [--base-http 0]
+                  [--listen 127.0.0.1] [--auth user:pass] [--tunnel DOMAIN] [--tunnel-id UUID] [--insecure]
+  pan-vlessbank check [accounts.txt] [--base 1081] [--timeout 12] [--workers 6]
+  pan-vlessbank tunnel-client --domain example.com --accounts 3 [--sub socks] [--dry]
 `)
 }
 
@@ -532,7 +532,7 @@ func runServe(args []string) {
 
 	addr := net.JoinHostPort(*listen, strconv.Itoa(*port))
 	httpSrv := &http.Server{Addr: addr, Handler: srv}
-	fmt.Printf("vlessbank webui : http://%s/\n", addr)
+	fmt.Printf("Pan-VlessBank webui : http://%s/\n", addr)
 	fmt.Println("login default   : admin / admin  (SEGERA GANTI di Pengaturan)")
 	if *listen == "0.0.0.0" {
 		fmt.Println("WARN: listen 0.0.0.0 - pastikan auth aktif, kalau tidak ini open proxy")

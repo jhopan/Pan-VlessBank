@@ -22,6 +22,7 @@ cloudflared.log
 webui.tunnel.yml
 webui.tunnel.log
 go/*.exe~
-go/pan-vlessbank
-vlessbank
-vlessbank.exe
+/go/pan-vlessbank
+/vlessbank
+/vlessbank.exe
+/go/pan-vlessbank.exe
